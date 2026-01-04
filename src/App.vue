@@ -62,6 +62,7 @@
           </button>
           <button @click="stopAnimation" class="control-btn">停止</button>
           <button @click="restartAnimation" class="control-btn">重播</button>
+          <button @click="downloadBase64Lottie" class="control-btn-primary">下载Lottie</button>
         </div>
 
         <!-- 动画信息 -->
@@ -352,6 +353,41 @@ const updateBackground = () => {
 const resetBackground = () => {
   backgroundColor.value = '#ffffff'
 }
+
+// 下载base64 lottie动画
+const downloadBase64Lottie = () => {
+  if (!currentAnimationData.value) {
+    alert('没有可下载的动画数据！')
+    return
+  }
+
+  try {
+    // 将动画数据转换为JSON字符串
+    const jsonString = JSON.stringify(currentAnimationData.value, null, 2)
+
+    // 创建Blob对象
+    const blob = new Blob([jsonString], { type: 'application/json' })
+
+    // 创建下载链接
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'lottie-base64.json'
+
+    // 触发下载
+    document.body.appendChild(link)
+    link.click()
+
+    // 清理
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+
+    console.log('Lottie动画下载成功！')
+  } catch (error) {
+    console.error('下载Lottie动画失败:', error)
+    alert('下载失败，请稍后重试！')
+  }
+}
 </script>
 
 <style scoped>
@@ -544,7 +580,24 @@ h1 {
 .control-btn:active {
   background-color: #3a8ee6;
 }
+.control-btn-primary {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 5px;
+  background-color: #409eff;
+  color: white;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.3s;
+}
 
+.control-btn-primary:hover {
+  background-color: #409eff;
+}
+
+.control-btn-primary:active {
+  background-color: #409eff;
+}
 /* 动画信息面板 */
 .info-panel {
   max-width: 600px;
