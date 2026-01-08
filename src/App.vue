@@ -93,6 +93,19 @@
 
       <div class="right-section">
         <h3>图片资源列表</h3>
+        <div class="background-controls">
+          <label for="resourceBgColor">📂 资源列表背景：</label>
+          <div class="color-picker-group">
+            <input type="color" id="resourceBgColor" v-model="resourceListBackgroundColor" />
+            <input
+              type="text"
+              v-model="resourceListBackgroundColor"
+              placeholder="#f5f7fa"
+              class="color-input"
+            />
+            <button @click="resetResourceListBackground" class="reset-btn">重置</button>
+          </div>
+        </div>
 
         <div v-if="imageAssets.length === 0" class="empty-state">
           <p>😊 当前动画没有使用图片资源</p>
@@ -120,7 +133,10 @@
               <p class="image-size">{{ asset.w }} x {{ asset.h }}</p>
             </div>
 
-            <button @click="selectImageToReplace(asset)" class="replace-btn">替换图片</button>
+            <div class="image-actions">
+              <button @click="selectImageToReplace(asset)" class="replace-btn">替换图片</button>
+              <button @click="downloadImage(asset)" class="download-btn">下载图片</button>
+            </div>
           </div>
         </div>
       </div>
@@ -132,19 +148,19 @@
 import { ref, computed, nextTick } from 'vue'
 import lottie from 'lottie-web'
 
-// ========== DOM 引用 ==========
+// ========== 响应式数据 ==========
 const lottieContainer = ref(null)
 const fileInput = ref(null)
 const imageInput = ref(null)
-
-// ========== 状态管理 ==========
 const currentAnimationData = ref(null)
 const isPlaying = ref(true)
 const currentReplacingAsset = ref(null)
 const backgroundColor = ref('#ffffff')
+const resourceListBackgroundColor = ref('#f5f7fa') // 资源列表背景色，默认值与CSS中一致
 const currentProgress = ref(0)
 const currentFrame = ref(0)
 const totalFrames = ref(0)
+const originalFileName = ref('lottie-base64.json') // 默认文件名
 let animation = null
 let progressUpdateInterval = null // 进度更新定时器
 
@@ -155,7 +171,7 @@ const containerStyle = computed(() => {
   const style = {
     background: backgroundColor.value,
     width: '528px',
-    height: '496px'
+    height: '496px',
   }
 
   return style
@@ -194,6 +210,8 @@ const loadJsonFile = async (file) => {
     try {
       const jsonData = JSON.parse(e.target.result)
       currentAnimationData.value = jsonData
+      // 保存原始文件名
+      originalFileName.value = file.name
       await nextTick()
       playAnimation(jsonData)
     } catch (error) {
@@ -397,6 +415,19 @@ const handleImageSelect = (event) => {
 
 const updateBackground = () => {}
 const resetBackground = () => (backgroundColor.value = '#ffffff')
+const resetResourceListBackground = () => (resourceListBackgroundColor.value = '#f5f7fa')
+
+const downloadImage = (asset) => {
+  const imageUrl = asset.u && asset.p ? getImageUrl(asset) : asset.p
+  if (!imageUrl) return
+
+  const link = document.createElement('a')
+  link.href = imageUrl
+  link.download = asset.p || asset.id || 'lottie-image'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+}
 
 const downloadBase64Lottie = () => {
   if (!currentAnimationData.value) {
@@ -409,7 +440,7 @@ const downloadBase64Lottie = () => {
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = 'lottie-base64.json'
+    link.download = originalFileName.value
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -575,8 +606,7 @@ h1 {
   align-items: center;
   justify-content: center;
   /* 增加宽高变化的过渡效果 */
-  transition:
-    background 0.3s ease;
+  transition: background 0.3s ease;
 }
 
 /* 控制按钮样式 */
@@ -763,7 +793,7 @@ h1 {
   border: 1px solid #ddd;
   border-radius: 4px;
   overflow: hidden;
-  background: white;
+  background: v-bind(resourceListBackgroundColor);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -808,29 +838,44 @@ h1 {
   font-size: 12px;
 }
 
-/* 3. 替换按钮：改为弱化样式（白底灰边），解决颜色冲突 */
-.replace-btn {
-  padding: 8px 16px;
+.image-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.replace-btn,
+.download-btn {
+  padding: 8px 12px;
   border: 1px solid #dcdfe6;
-  border-radius: 5px;
   background-color: #fff;
   color: #606266;
+  border-radius: 4px;
   cursor: pointer;
-  font-size: 13px;
-  white-space: nowrap;
+  font-size: 14px;
   transition: all 0.3s;
 }
 
-/* 悬停时变绿，提示这是功能按钮 */
-.replace-btn:hover {
-  color: #67c23a;
-  border-color: #c2e7b0;
-  background-color: #f0f9eb;
+.replace-btn {
+  border-color: #1890ff;
+  color: #1890ff;
 }
 
-.replace-btn:active {
-  background-color: #e1f3d8;
-  border-color: #67c23a;
+.replace-btn:hover {
+  border-color: #40a9ff;
+  color: #40a9ff;
+  background-color: #ecf5ff;
+}
+
+.download-btn {
+  border-color: #52c41a;
+  color: #52c41a;
+}
+
+.download-btn:hover {
+  border-color: #73d13d;
+  color: #73d13d;
+  background-color: #f0f9eb;
 }
 
 /* ========== 响应式设计 ========== */
