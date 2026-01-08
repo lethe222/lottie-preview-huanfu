@@ -3,14 +3,11 @@
     <h1>Lottie 播放器与图片替换工具</h1>
     <p>只支持base64格式的lottie动画上传，可以替换动画中的图片资源</p>
 
-    <!-- 文件上传区域 -->
-    <!-- ✅ 正确：必须同时阻止 dragover 和 drop 的默认行为 -->
     <div class="upload-area" @dragover.prevent @drop.prevent="handleDrop" @click="triggerFileInput">
       <p>📁 将base64格式的lottie动画文件拖拽到此区域</p>
       <p class="upload-hint">或点击选择文件</p>
     </div>
 
-    <!-- 隐藏的文件选择器：用户点击上传区域后触发，限制只能选择 JSON 文件 -->
     <input
       ref="fileInput"
       type="file"
@@ -19,7 +16,6 @@
       @change="handleFileSelect"
     />
 
-    <!-- 隐藏的图片文件选择器：用于替换动画中的图片资源，限制只能选择图片文件 -->
     <input
       ref="imageInput"
       type="file"
@@ -28,11 +24,8 @@
       @change="handleImageSelect"
     />
 
-    <!-- 动画和控制区域 -->
     <div v-if="currentAnimationData" class="content-wrapper">
-      <!-- 左侧：动画预览 -->
       <div class="left-section">
-        <!-- 背景颜色选择器 -->
         <div class="background-controls">
           <label for="bgColor">🎨 播放器背景：</label>
           <div class="color-picker-group">
@@ -48,24 +41,36 @@
           </div>
         </div>
 
-        <!-- Lottie 动画容器 -->
-        <div
-          class="lottie-preview"
-          ref="lottieContainer"
-          :style="{ background: backgroundColor }"
-        ></div>
+        <div class="lottie-preview" ref="lottieContainer" :style="containerStyle"></div>
 
-        <!-- 播放控制按钮 -->
         <div class="controls">
           <button @click="togglePlay" class="control-btn">
             {{ isPlaying ? '暂停' : '播放' }}
           </button>
           <button @click="stopAnimation" class="control-btn">停止</button>
           <button @click="restartAnimation" class="control-btn">重播</button>
-          <button @click="downloadBase64Lottie" class="control-btn-primary">下载Lottie</button>
+          <button @click="goToFirstFrame" class="control-btn">首帧</button>
+          <button @click="saveCurrentFrame" class="control-btn control-btn-primary">
+            保存当前帧
+          </button>
+          <button @click="downloadBase64Lottie" class="control-btn control-btn-primary">
+            下载Base64 Lottie
+          </button>
         </div>
 
-        <!-- 动画信息 -->
+        <div class="progress-section">
+          <input
+            type="range"
+            class="progress-bar"
+            v-model.number="currentProgress"
+            min="0"
+            :max="100"
+            @input="seekToProgress"
+            :disabled="!animation"
+          />
+          <span class="progress-text">{{ currentFrame }} / {{ totalFrames }}</span>
+        </div>
+
         <div class="info-panel">
           <h3>动画信息</h3>
           <p>
@@ -86,7 +91,6 @@
         </div>
       </div>
 
-      <!-- 右侧：图片资源列表 -->
       <div class="right-section">
         <h3>图片资源列表</h3>
 
@@ -125,52 +129,57 @@
 </template>
 
 <script setup>
-// ========== 导入依赖 ==========
 import { ref, computed, nextTick } from 'vue'
 import lottie from 'lottie-web'
 
 // ========== DOM 引用 ==========
-const lottieContainer = ref(null) // 动画播放器的容器
-const fileInput = ref(null) // JSON 文件选择器
-const imageInput = ref(null) // 图片文件选择器
+const lottieContainer = ref(null)
+const fileInput = ref(null)
+const imageInput = ref(null)
 
 // ========== 状态管理 ==========
-const currentAnimationData = ref(null) // 当前的 Lottie JSON 数据
-const isPlaying = ref(true) // 动画播放状态
-const currentReplacingAsset = ref(null) // 当前正在替换的图片资源
-const backgroundColor = ref('#ffffff') // 播放器背景颜色
-let animation = null // Lottie 动画实例对象
+const currentAnimationData = ref(null)
+const isPlaying = ref(true)
+const currentReplacingAsset = ref(null)
+const backgroundColor = ref('#ffffff')
+const currentProgress = ref(0)
+const currentFrame = ref(0)
+const totalFrames = ref(0)
+let animation = null
+let progressUpdateInterval = null // 进度更新定时器
 
 // ========== 计算属性 ==========
-// 从动画数据中提取所有图片资源
+
+// [新增] 动态计算容器样式，将尺寸固定为528x496
+const containerStyle = computed(() => {
+  const style = {
+    background: backgroundColor.value,
+    width: '528px',
+    height: '496px'
+  }
+
+  return style
+})
+
 const imageAssets = computed(() => {
   if (!currentAnimationData.value || !currentAnimationData.value.assets) {
     return []
   }
-  // 过滤出图片类型的资源（具有宽高和路径信息的资源）
   return currentAnimationData.value.assets.filter((asset) => {
-    // Lottie 中图片资源通常有 w(宽度), h(高度), u(路径), p(文件名), e(嵌入标记) 等属性
     return asset.w && asset.h && (asset.u || asset.p || asset.e === 1)
   })
 })
 
-// ========== 文件上传相关方法 ==========
-// 触发文件选择器
-const triggerFileInput = () => {
-  fileInput.value.click()
-}
+// ========== 方法 (保持逻辑不变) ==========
 
-// 处理文件选择器选择的文件
+const triggerFileInput = () => fileInput.value.click()
+
 const handleFileSelect = (event) => {
   const file = event.target.files[0]
-  if (file) {
-    loadJsonFile(file)
-  }
+  if (file) loadJsonFile(file)
 }
 
-// 处理拖拽上传的文件
 const handleDrop = (event) => {
-  // 从拖放事件中获取文件
   const file = event.dataTransfer.files[0]
   if (file && file.type === 'application/json') {
     loadJsonFile(file)
@@ -179,66 +188,29 @@ const handleDrop = (event) => {
   }
 }
 
-// 读取并解析 JSON 文件
 const loadJsonFile = async (file) => {
-  console.log('开始加载文件:', file.name)
   const reader = new FileReader()
-
-  // 文件读取成功后的回调
   reader.onload = async (e) => {
     try {
-      // 将文件内容解析为 JSON 对象
       const jsonData = JSON.parse(e.target.result)
-      console.log('JSON 解析成功，准备播放动画')
       currentAnimationData.value = jsonData
-
-      // 等待 Vue 更新 DOM，确保容器已渲染
       await nextTick()
-
-      // 播放动画
       playAnimation(jsonData)
     } catch (error) {
       alert('JSON 文件格式错误：' + error.message)
-      console.error('JSON 解析失败:', error)
     }
   }
-
-  // 文件读取失败的回调
-  reader.onerror = (error) => {
-    alert('文件读取失败！')
-    console.error('文件读取错误:', error)
-  }
-
-  // 以文本形式读取文件
   reader.readAsText(file)
 }
 
-// ========== 动画播放控制方法 ==========
-// 初始化并播放 Lottie 动画
 const playAnimation = (animationData) => {
-  // 检查容器是否存在
-  if (!lottieContainer.value) {
-    console.error('Lottie 容器未找到！')
-    return
-  }
+  if (!lottieContainer.value) return
+  if (animation) animation.destroy()
 
-  // 如果已有动画，先销毁
-  if (animation) {
-    try {
-      animation.destroy()
-    } catch (error) {
-      console.warn('销毁动画时出错:', error)
-    }
-    animation = null
-  }
-
-  // 清空容器
   lottieContainer.value.innerHTML = ''
 
-  // 添加延迟以确保容器已清空
   setTimeout(() => {
     try {
-      // 加载新动画
       animation = lottie.loadAnimation({
         container: lottieContainer.value,
         renderer: 'svg',
@@ -248,67 +220,157 @@ const playAnimation = (animationData) => {
       })
 
       isPlaying.value = true
-      console.log('动画加载成功！')
+
+      // 计算总帧数
+      totalFrames.value = Math.floor(
+        ((animationData.op - animationData.ip) / animationData.fr) * 1000,
+      )
+
+      // 清除旧的定时器
+      if (progressUpdateInterval) {
+        clearInterval(progressUpdateInterval)
+      }
+
+      // 设置进度更新定时器
+      progressUpdateInterval = setInterval(() => {
+        if (animation && isPlaying.value) {
+          const currentTime = animation.currentRawFrame
+          const duration = animation.totalFrames
+          if (duration > 0) {
+            currentProgress.value = Math.floor((currentTime / duration) * 100)
+            currentFrame.value = Math.floor(currentTime)
+          }
+        }
+      }, 100)
     } catch (error) {
-      console.error('加载动画失败:', error)
-      alert('动画加载失败，请检查 JSON 文件格式！')
+      alert('动画加载失败')
     }
   }, 50)
 }
 
-// 切换播放/暂停状态
 const togglePlay = () => {
   if (!animation) return
-
-  if (isPlaying.value) {
-    animation.pause() // 暂停动画
-  } else {
-    animation.play() // 继续播放
-  }
+  if (isPlaying.value) animation.pause()
+  else animation.play()
   isPlaying.value = !isPlaying.value
 }
 
-// 停止动画（回到第一帧）
 const stopAnimation = () => {
   if (!animation) return
   animation.stop()
   isPlaying.value = false
 }
 
-// 重新播放动画（从头开始）
 const restartAnimation = () => {
   if (!animation) return
-  animation.goToAndPlay(0) // 跳转到第0帧并播放
+  animation.goToAndPlay(0)
   isPlaying.value = true
+  currentProgress.value = 0
+  currentFrame.value = 0
 }
 
-// ========== 图片资源处理方法 ==========
-// 获取图片资源的 URL
+// 首帧
+const goToFirstFrame = () => {
+  if (!animation) return
+  animation.goToAndStop(0, true)
+  isPlaying.value = false
+  currentProgress.value = 0
+  currentFrame.value = 0
+}
+
+// 根据进度条跳转
+const seekToProgress = () => {
+  if (!animation) return
+  const targetFrame = (currentProgress.value / 100) * animation.totalFrames
+  animation.goToAndStop(targetFrame, true)
+  currentFrame.value = Math.floor(targetFrame)
+}
+
+// 保存当前帧为图片
+const saveCurrentFrame = () => {
+  if (!animation) return
+
+  // 暂停动画以确保获取的是当前帧
+  const wasPlaying = isPlaying.value
+  animation.pause()
+
+  // 获取SVG元素
+  const svgElement = lottieContainer.value.querySelector('svg')
+  if (!svgElement) {
+    alert('无法获取动画元素，请重试！')
+    if (wasPlaying) animation.play()
+    return
+  }
+
+  // 创建一个新的SVG元素副本，设置背景色
+  const svgClone = svgElement.cloneNode(true)
+  svgClone.setAttribute('style', `background-color: ${backgroundColor.value};`)
+
+  // 将SVG转换为数据URL
+  const svgData = new XMLSerializer().serializeToString(svgClone)
+  const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' })
+  const svgUrl = URL.createObjectURL(svgBlob)
+
+  // 创建Canvas并绘制SVG
+  const img = new Image()
+  img.onload = () => {
+    const canvas = document.createElement('canvas')
+    canvas.width = img.width
+    canvas.height = img.height
+    const ctx = canvas.getContext('2d')
+
+    // 设置背景色
+    ctx.fillStyle = backgroundColor.value
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+    // 绘制SVG
+    ctx.drawImage(img, 0, 0)
+
+    // 将Canvas转换为PNG
+    const pngUrl = canvas.toDataURL('image/png')
+
+    // 创建下载链接
+    const link = document.createElement('a')
+    link.href = pngUrl
+    link.download = `lottie-frame-${currentFrame.value}.png`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+
+    // 清理临时URL
+    URL.revokeObjectURL(svgUrl)
+
+    // 恢复动画播放状态
+    if (wasPlaying) animation.play()
+
+    alert('当前帧已保存！')
+  }
+
+  img.onerror = () => {
+    alert('保存图片失败，请重试！')
+    URL.revokeObjectURL(svgUrl)
+    if (wasPlaying) animation.play()
+  }
+
+  img.src = svgUrl
+}
+
 const getImageUrl = (asset) => {
-  // 如果是嵌入式图片（e=1 表示嵌入的 base64 图片）
-  if (asset.p && asset.e === 1) {
-    return asset.p
-  }
-  // 如果是外部图片（u 是路径，p 是文件名）
-  if (asset.u && asset.p) {
-    return asset.u + asset.p
-  }
+  if (asset.p && asset.e === 1) return asset.p
+  if (asset.u && asset.p) return asset.u + asset.p
   return ''
 }
 
-// 处理图片加载错误
 const handleImageError = (event) => {
   event.target.style.display = 'none'
   event.target.parentElement.innerHTML = '<div class="no-preview">加载失败</div>'
 }
 
-// 选择要替换的图片资源
 const selectImageToReplace = (asset) => {
   currentReplacingAsset.value = asset
-  imageInput.value.click() // 触发图片选择器
+  imageInput.value.click()
 }
 
-// 处理选择的图片并替换到动画中
 const handleImageSelect = (event) => {
   const file = event.target.files[0]
   if (!file || !currentReplacingAsset.value) return
@@ -316,75 +378,43 @@ const handleImageSelect = (event) => {
   const reader = new FileReader()
   reader.onload = (e) => {
     const base64Image = e.target.result
-
-    // 在 assets 数组中找到要替换的图片资源
     const assetIndex = currentAnimationData.value.assets.findIndex(
       (a) => a.id === currentReplacingAsset.value.id,
     )
 
     if (assetIndex !== -1) {
-      // 将图片替换为 base64 格式
-      currentAnimationData.value.assets[assetIndex].p = base64Image // 图片数据
-      currentAnimationData.value.assets[assetIndex].u = '' // 清空路径
-      currentAnimationData.value.assets[assetIndex].e = 1 // 标记为嵌入式图片
-
-      // 重新加载动画以显示新图片
+      currentAnimationData.value.assets[assetIndex].p = base64Image
+      currentAnimationData.value.assets[assetIndex].u = ''
+      currentAnimationData.value.assets[assetIndex].e = 1
       playAnimation(currentAnimationData.value)
-
       alert('图片替换成功！')
     }
-
-    // 清空文件输入和当前替换的资源引用
     event.target.value = ''
     currentReplacingAsset.value = null
   }
-
-  // 将图片文件读取为 base64 格式
   reader.readAsDataURL(file)
 }
 
-// ========== 背景控制方法 ==========
-// 更新背景颜色（实际上通过 Vue 的响应式自动更新）
-const updateBackground = () => {
-  // 背景颜色会通过 :style 绑定自动更新
-}
+const updateBackground = () => {}
+const resetBackground = () => (backgroundColor.value = '#ffffff')
 
-// 重置背景颜色为默认白色
-const resetBackground = () => {
-  backgroundColor.value = '#ffffff'
-}
-
-// 下载base64 lottie动画
 const downloadBase64Lottie = () => {
   if (!currentAnimationData.value) {
     alert('没有可下载的动画数据！')
     return
   }
-
   try {
-    // 将动画数据转换为JSON字符串
     const jsonString = JSON.stringify(currentAnimationData.value, null, 2)
-
-    // 创建Blob对象
     const blob = new Blob([jsonString], { type: 'application/json' })
-
-    // 创建下载链接
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
     link.download = 'lottie-base64.json'
-
-    // 触发下载
     document.body.appendChild(link)
     link.click()
-
-    // 清理
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
-
-    console.log('Lottie动画下载成功！')
   } catch (error) {
-    console.error('下载Lottie动画失败:', error)
     alert('下载失败，请稍后重试！')
   }
 }
@@ -396,7 +426,6 @@ const downloadBase64Lottie = () => {
   box-sizing: border-box;
 }
 
-/* ========== 主容器 ========== */
 .main-box {
   max-width: 1400px;
   margin: 0 auto;
@@ -446,12 +475,11 @@ h1 {
   color: #999;
 }
 
-/* 隐藏的文件输入框 */
 .hidden-input {
   display: none;
 }
 
-/* ========== 主内容区域（左右布局）========== */
+/* ========== 主内容区域 ========== */
 .content-wrapper {
   display: flex;
   gap: 30px;
@@ -536,68 +564,134 @@ h1 {
   background-color: #a6a9ad;
 }
 
-.reset-btn:active {
-  background-color: #82848a;
-}
-
 /* Lottie 动画播放器容器 */
 .lottie-preview {
-  width: 100%;
-  max-width: 600px;
-  height: 500px;
+  width: 528px;
+  max-width: 528px;
   margin: 0 auto 20px;
   border: 2px solid #eee;
   border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.3s ease;
+  /* 增加宽高变化的过渡效果 */
+  transition:
+    background 0.3s ease;
 }
 
-/* 播放控制按钮 */
+/* 控制按钮样式 */
 .controls {
   display: flex;
-  gap: 10px;
+  gap: 8px;
+  margin-bottom: 15px;
+  flex-wrap: wrap;
   justify-content: center;
-  margin-bottom: 20px;
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .control-btn {
-  padding: 10px 20px;
+  padding: 8px 16px;
   border: none;
-  border-radius: 5px;
+  border-radius: 4px;
   background-color: #409eff;
   color: white;
   cursor: pointer;
-  font-size: 14px;
-  transition: background-color 0.3s;
+  font-size: 13px;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .control-btn:hover {
   background-color: #66b1ff;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
+  transform: translateY(-1px);
 }
 
 .control-btn:active {
   background-color: #3a8ee6;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  transform: translateY(0);
 }
+
+.control-btn:disabled {
+  background-color: #c0c4cc;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
 .control-btn-primary {
-  padding: 10px 20px;
-  border: none;
-  border-radius: 5px;
-  background-color: #409eff;
-  color: white;
-  cursor: pointer;
-  font-size: 14px;
-  transition: background-color 0.3s;
+  background-color: #67c23a;
 }
 
 .control-btn-primary:hover {
-  background-color: #409eff;
+  background-color: #85ce61;
 }
 
 .control-btn-primary:active {
-  background-color: #409eff;
+  background-color: #5daf34;
 }
+
+/* 进度条样式 */
+.progress-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  width: 100%;
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 10px;
+  border-radius: 5px;
+  background-color: #eee;
+  outline: none;
+  cursor: pointer;
+  -webkit-appearance: none;
+}
+
+.progress-bar::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: #409eff;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.progress-bar::-webkit-slider-thumb:hover {
+  background-color: #66b1ff;
+}
+
+.progress-bar::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: #409eff;
+  cursor: pointer;
+  border: none;
+  transition: background-color 0.3s;
+}
+
+.progress-bar::-moz-range-thumb:hover {
+  background-color: #66b1ff;
+}
+
+.progress-text {
+  font-size: 14px;
+  color: #666;
+  font-family: monospace;
+}
+
 /* 动画信息面板 */
 .info-panel {
   max-width: 600px;
@@ -642,14 +736,12 @@ h1 {
   color: #999;
 }
 
-/* 图片资源列表 */
 .image-list {
   display: flex;
   flex-direction: column;
   gap: 15px;
 }
 
-/* 单个图片资源项 */
 .image-item {
   display: flex;
   align-items: center;
@@ -664,7 +756,6 @@ h1 {
   background: #e8ecf1;
 }
 
-/* 图片缩略图预览 */
 .image-preview {
   width: 80px;
   height: 80px;
@@ -690,7 +781,6 @@ h1 {
   text-align: center;
 }
 
-/* 图片信息 */
 .image-info {
   flex: 1;
   min-width: 0;
@@ -718,25 +808,29 @@ h1 {
   font-size: 12px;
 }
 
-/* 替换按钮 */
+/* 3. 替换按钮：改为弱化样式（白底灰边），解决颜色冲突 */
 .replace-btn {
   padding: 8px 16px;
-  border: none;
+  border: 1px solid #dcdfe6;
   border-radius: 5px;
-  background-color: #67c23a;
-  color: white;
+  background-color: #fff;
+  color: #606266;
   cursor: pointer;
   font-size: 13px;
   white-space: nowrap;
-  transition: background-color 0.3s;
+  transition: all 0.3s;
 }
 
+/* 悬停时变绿，提示这是功能按钮 */
 .replace-btn:hover {
-  background-color: #85ce61;
+  color: #67c23a;
+  border-color: #c2e7b0;
+  background-color: #f0f9eb;
 }
 
 .replace-btn:active {
-  background-color: #5daf34;
+  background-color: #e1f3d8;
+  border-color: #67c23a;
 }
 
 /* ========== 响应式设计 ========== */
