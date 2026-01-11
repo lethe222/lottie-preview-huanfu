@@ -56,6 +56,9 @@
           <button @click="downloadBase64Lottie" class="control-btn control-btn-primary">
             下载Base64 Lottie
           </button>
+          <button @click="exportAllImages" class="control-btn control-btn-secondary">
+            导出所有图片
+          </button>
         </div>
 
         <div class="progress-section">
@@ -434,9 +437,118 @@ const downloadBase64Lottie = () => {
     alert('没有可下载的动画数据！')
     return
   }
+
   try {
-    const jsonString = JSON.stringify(currentAnimationData.value, null, 2)
-    const blob = new Blob([jsonString], { type: 'application/json' })
+    // 深拷贝动画数据
+    const optimizedData = JSON.parse(JSON.stringify(currentAnimationData.value))
+
+    // 优化统计信息
+    let optimizationInfo = {
+      originalSize: 0,
+      optimizedSize: 0,
+      removedKeyframes: 0
+    }
+
+    // 简化数值精度（保留2位小数）
+    const roundNumber = (num) => {
+      if (typeof num !== 'number') return num
+      return Math.round(num * 100) / 100
+    }
+
+    // 递归优化数值精度
+    const optimizeNumbers = (obj) => {
+      if (typeof obj === 'number') {
+        return roundNumber(obj)
+      }
+      if (Array.isArray(obj)) {
+        return obj.map(optimizeNumbers)
+      }
+      if (typeof obj === 'object' && obj !== null) {
+        const result = {}
+        for (const key in obj) {
+          result[key] = optimizeNumbers(obj[key])
+        }
+        return result
+      }
+      return obj
+    }
+
+    // 移除冗余关键帧（保留首尾和变化较大的关键帧）
+    const optimizeKeyframes = (keyframes) => {
+      if (!Array.isArray(keyframes) || keyframes.length <= 2) return keyframes
+
+      const result = [keyframes[0]] // 保留第一帧
+      let removedCount = 0
+
+      for (let i = 1; i < keyframes.length - 1; i++) {
+        const prev = keyframes[i - 1]
+        const curr = keyframes[i]
+        const next = keyframes[i + 1]
+
+        // 检查当前关键帧是否重要（值变化较大）
+        let isImportant = false
+
+        if (curr.s && prev.s && next.s) {
+          // 检查起始值的变化
+          const prevVal = JSON.stringify(prev.s)
+          const currVal = JSON.stringify(curr.s)
+          const nextVal = JSON.stringify(next.s)
+
+          if (currVal !== prevVal || currVal !== nextVal) {
+            isImportant = true
+          }
+        } else {
+          // 如果结构不同，保留关键帧
+          isImportant = true
+        }
+
+        if (isImportant) {
+          result.push(curr)
+        } else {
+          removedCount++
+        }
+      }
+
+      result.push(keyframes[keyframes.length - 1]) // 保留最后一帧
+      optimizationInfo.removedKeyframes += removedCount
+      return result
+    }
+
+    // 递归优化动画数据（保留 base64 图片）
+    const optimizeAnimation = (obj) => {
+      if (typeof obj !== 'object' || obj === null) return obj
+
+      if (Array.isArray(obj)) {
+        return obj.map(optimizeAnimation)
+      }
+
+      const result = {}
+      for (const key in obj) {
+        if (key === 'k' && obj.a === 1 && Array.isArray(obj[key])) {
+          // 这是关键帧数组，进行优化
+          result[key] = optimizeKeyframes(obj[key])
+        } else {
+          result[key] = optimizeAnimation(obj[key])
+        }
+      }
+      return result
+    }
+
+    // 应用优化：移除冗余关键帧
+    let finalData = optimizeAnimation(optimizedData)
+
+    // 优化数值精度（但保持 base64 图片数据不变）
+    finalData = optimizeNumbers(finalData)
+
+    // 计算文件大小
+    const originalString = JSON.stringify(currentAnimationData.value)
+    const optimizedString = JSON.stringify(finalData) // 不使用格式化，减小体积
+    optimizationInfo.originalSize = (new Blob([originalString]).size / 1024).toFixed(2)
+    optimizationInfo.optimizedSize = (new Blob([optimizedString]).size / 1024).toFixed(2)
+    const reduction = ((1 - optimizationInfo.optimizedSize / optimizationInfo.originalSize) * 100).toFixed(1)
+
+    // 下载优化后的文件
+    const blob = new Blob([optimizedString], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
@@ -445,8 +557,76 @@ const downloadBase64Lottie = () => {
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
+
+    // 显示优化结果
+    alert(
+      `下载完成！\n\n` +
+      `原始大小: ${optimizationInfo.originalSize}KB\n` +
+      `优化后大小: ${optimizationInfo.optimizedSize}KB\n` +
+      `减少: ${reduction}%\n\n` +
+      `移除了 ${optimizationInfo.removedKeyframes} 个冗余关键帧\n` +
+      `优化了数值精度（保留2位小数）\n\n` +
+      `所有图片保持为 base64 格式，可直接使用。`
+    )
   } catch (error) {
     alert('下载失败，请稍后重试！')
+  }
+}
+
+const exportAllImages = () => {
+  if (!currentAnimationData.value || !imageAssets.value.length) {
+    alert('当前动画没有图片资源可导出！')
+    return
+  }
+
+  let exportedCount = 0
+
+  imageAssets.value.forEach((asset, index) => {
+    try {
+      let imageUrl = ''
+
+      // 获取图片数据
+      if (asset.p && asset.p.startsWith('data:image')) {
+        imageUrl = asset.p
+      } else if (asset.u && asset.p) {
+        imageUrl = getImageUrl(asset)
+      } else {
+        return
+      }
+
+      // 提取文件扩展名
+      let ext = 'png'
+      if (asset.p && asset.p.startsWith('data:image')) {
+        const mimeMatch = asset.p.match(/data:image\/(\w+);base64,/)
+        ext = mimeMatch ? mimeMatch[1] : 'png'
+      } else if (asset.p) {
+        const extMatch = asset.p.match(/\.(\w+)$/)
+        ext = extMatch ? extMatch[1] : 'png'
+      }
+
+      // 创建下载链接
+      const link = document.createElement('a')
+      link.href = imageUrl
+      link.download = `image_${asset.id || index}.${ext}`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+
+      exportedCount++
+
+      // 添加延迟避免浏览器阻止多次下载
+      if (index < imageAssets.value.length - 1) {
+        setTimeout(() => {}, 100)
+      }
+    } catch (error) {
+      console.error(`导出图片 ${asset.id} 失败:`, error)
+    }
+  })
+
+  if (exportedCount > 0) {
+    alert(`成功导出 ${exportedCount} 张图片！\n\n提示: 如果浏览器阻止了多个下载，请在浏览器权限设置中允许。`)
+  } else {
+    alert('导出失败，没有可导出的图片！')
   }
 }
 </script>
@@ -662,6 +842,30 @@ h1 {
 
 .control-btn-primary:active {
   background-color: #5daf34;
+}
+
+.control-btn-warning {
+  background-color: #e6a23c;
+}
+
+.control-btn-warning:hover {
+  background-color: #ebb563;
+}
+
+.control-btn-warning:active {
+  background-color: #cf9236;
+}
+
+.control-btn-secondary {
+  background-color: #909399;
+}
+
+.control-btn-secondary:hover {
+  background-color: #a6a9ad;
+}
+
+.control-btn-secondary:active {
+  background-color: #82848a;
 }
 
 /* 进度条样式 */
