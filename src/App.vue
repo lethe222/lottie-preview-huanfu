@@ -1,4 +1,5 @@
 <template>
+  <Toast ref="toastRef" />
   <div class="main-box">
     <h1>Lottie 播放器与图片替换工具</h1>
     <p>只支持base64格式的lottie动画上传，可以替换动画中的图片资源</p>
@@ -90,6 +91,7 @@
               ).toFixed(2)
             }}秒
           </p>
+          <p><strong>文件体积：</strong>{{ lottieFileSize }} KB</p>
           <p><strong>图片资源数量：</strong>{{ imageAssets.length }}</p>
         </div>
       </div>
@@ -133,7 +135,7 @@
               <p class="image-name" :title="asset.p">
                 {{ asset.p || asset.u || '未命名' }}
               </p>
-              <p class="image-size">{{ asset.w }} x {{ asset.h }}</p>
+              <p class="image-size">{{ asset.w }} x {{ asset.h }}｜{{ getImageSize(asset) }} KB</p>
             </div>
 
             <div class="image-actions">
@@ -150,8 +152,10 @@
 <script setup>
 import { ref, computed, nextTick } from 'vue'
 import lottie from 'lottie-web'
+import Toast from './components/Toast.vue'
 
 // ========== 响应式数据 ==========
+const toastRef = ref(null)
 const lottieContainer = ref(null)
 const fileInput = ref(null)
 const imageInput = ref(null)
@@ -164,6 +168,7 @@ const currentProgress = ref(0)
 const currentFrame = ref(0)
 const totalFrames = ref(0)
 const originalFileName = ref('lottie-base64.json') // 默认文件名
+const lottieFileSize = ref(0) // Lottie 文件体积（KB）
 let animation = null
 let progressUpdateInterval = null // 进度更新定时器
 
@@ -189,6 +194,32 @@ const imageAssets = computed(() => {
   })
 })
 
+// 计算图片大小（KB）
+const getImageSize = (asset) => {
+  try {
+    let base64String = ''
+
+    // 获取 base64 字符串
+    if (asset.p && asset.p.startsWith('data:image')) {
+      // 移除 data:image/xxx;base64, 前缀
+      base64String = asset.p.split(',')[1] || asset.p
+    } else if (asset.p) {
+      base64String = asset.p
+    }
+
+    if (!base64String) return '0'
+
+    // 计算 base64 字符串的实际字节数
+    // base64 编码后的字符串长度 * 0.75 约等于原始字节数
+    const sizeInBytes = base64String.length * 0.75
+    const sizeInKB = (sizeInBytes / 1024).toFixed(2)
+
+    return sizeInKB
+  } catch (error) {
+    return '0'
+  }
+}
+
 // ========== 方法 (保持逻辑不变) ==========
 
 const triggerFileInput = () => fileInput.value.click()
@@ -203,7 +234,7 @@ const handleDrop = (event) => {
   if (file && file.type === 'application/json') {
     loadJsonFile(file)
   } else {
-    alert('请上传 JSON 文件！')
+    toastRef.value?.show('请上传 JSON 文件！')
   }
 }
 
@@ -215,10 +246,12 @@ const loadJsonFile = async (file) => {
       currentAnimationData.value = jsonData
       // 保存原始文件名
       originalFileName.value = file.name
+      // 计算文件体积（KB）
+      lottieFileSize.value = (new Blob([e.target.result]).size / 1024).toFixed(2)
       await nextTick()
       playAnimation(jsonData)
     } catch (error) {
-      alert('JSON 文件格式错误：' + error.message)
+      toastRef.value?.show('JSON 文件格式错误：' + error.message)
     }
   }
   reader.readAsText(file)
@@ -264,7 +297,7 @@ const playAnimation = (animationData) => {
         }
       }, 100)
     } catch (error) {
-      alert('动画加载失败')
+      toastRef.value?.show('动画加载失败')
     }
   }, 50)
 }
@@ -318,7 +351,7 @@ const saveCurrentFrame = () => {
   // 获取SVG元素
   const svgElement = lottieContainer.value.querySelector('svg')
   if (!svgElement) {
-    alert('无法获取动画元素，请重试！')
+    toastRef.value?.show('无法获取动画元素，请重试！')
     if (wasPlaying) animation.play()
     return
   }
@@ -364,11 +397,11 @@ const saveCurrentFrame = () => {
     // 恢复动画播放状态
     if (wasPlaying) animation.play()
 
-    alert('当前帧已保存！')
+    toastRef.value?.show('当前帧已保存！')
   }
 
   img.onerror = () => {
-    alert('保存图片失败，请重试！')
+    toastRef.value?.show('保存图片失败，请重试！')
     URL.revokeObjectURL(svgUrl)
     if (wasPlaying) animation.play()
   }
@@ -408,7 +441,7 @@ const handleImageSelect = (event) => {
       currentAnimationData.value.assets[assetIndex].u = ''
       currentAnimationData.value.assets[assetIndex].e = 1
       playAnimation(currentAnimationData.value)
-      alert('图片替换成功！')
+      toastRef.value?.show('图片替换成功！')
     }
     event.target.value = ''
     currentReplacingAsset.value = null
@@ -434,7 +467,7 @@ const downloadImage = (asset) => {
 
 const downloadBase64Lottie = () => {
   if (!currentAnimationData.value) {
-    alert('没有可下载的动画数据！')
+    toastRef.value?.show('没有可下载的动画数据！')
     return
   }
 
@@ -446,7 +479,7 @@ const downloadBase64Lottie = () => {
     let optimizationInfo = {
       originalSize: 0,
       optimizedSize: 0,
-      removedKeyframes: 0
+      removedKeyframes: 0,
     }
 
     // 简化数值精度（保留2位小数）
@@ -540,12 +573,8 @@ const downloadBase64Lottie = () => {
     // 优化数值精度（但保持 base64 图片数据不变）
     finalData = optimizeNumbers(finalData)
 
-    // 计算文件大小
-    const originalString = JSON.stringify(currentAnimationData.value)
+    // 生成下载文件的字符串
     const optimizedString = JSON.stringify(finalData) // 不使用格式化，减小体积
-    optimizationInfo.originalSize = (new Blob([originalString]).size / 1024).toFixed(2)
-    optimizationInfo.optimizedSize = (new Blob([optimizedString]).size / 1024).toFixed(2)
-    const reduction = ((1 - optimizationInfo.optimizedSize / optimizationInfo.originalSize) * 100).toFixed(1)
 
     // 下载优化后的文件
     const blob = new Blob([optimizedString], { type: 'application/json' })
@@ -558,24 +587,22 @@ const downloadBase64Lottie = () => {
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
 
+    // 计算实际下载文件的大小
+    const downloadSize = (blob.size / 1024).toFixed(2)
+    const reduction = ((1 - blob.size / (lottieFileSize.value * 1024)) * 100).toFixed(1)
+
     // 显示优化结果
-    alert(
-      `下载完成！\n\n` +
-      `原始大小: ${optimizationInfo.originalSize}KB\n` +
-      `优化后大小: ${optimizationInfo.optimizedSize}KB\n` +
-      `减少: ${reduction}%\n\n` +
-      `移除了 ${optimizationInfo.removedKeyframes} 个冗余关键帧\n` +
-      `优化了数值精度（保留2位小数）\n\n` +
-      `所有图片保持为 base64 格式，可直接使用。`
+    toastRef.value?.show(
+      `下载完成！原始大小: ${lottieFileSize.value}KB，优化后: ${downloadSize}KB（减少${reduction}%）`,
     )
   } catch (error) {
-    alert('下载失败，请稍后重试！')
+    toastRef.value?.show('下载失败，请稍后重试！')
   }
 }
 
 const exportAllImages = () => {
   if (!currentAnimationData.value || !imageAssets.value.length) {
-    alert('当前动画没有图片资源可导出！')
+    toastRef.value?.show('当前动画没有图片资源可导出！')
     return
   }
 
@@ -624,9 +651,9 @@ const exportAllImages = () => {
   })
 
   if (exportedCount > 0) {
-    alert(`成功导出 ${exportedCount} 张图片！\n\n提示: 如果浏览器阻止了多个下载，请在浏览器权限设置中允许。`)
+    toastRef.value?.show(`成功导出 ${exportedCount} 张图片！`)
   } else {
-    alert('导出失败，没有可导出的图片！')
+    toastRef.value?.show('导出失败，没有可导出的图片！')
   }
 }
 </script>
