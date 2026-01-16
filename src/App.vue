@@ -222,6 +222,32 @@ const getImageSize = (asset) => {
 
 // ========== 方法 (保持逻辑不变) ==========
 
+/**
+ * 修复 Lottie JSON 中 to 和 ti 为 null 的问题
+ * 这会导致 iOS 和 Android 的 Lottie 播放器崩溃
+ * 解决方案：删除值为 null 的 to 和 ti 字段
+ */
+const fixNullKeyframes = (obj) => {
+  if (typeof obj !== 'object' || obj === null) {
+    return obj
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map(item => fixNullKeyframes(item))
+  }
+
+  const result = {}
+  for (const [key, value] of Object.entries(obj)) {
+    // 如果是关键帧对象中的 to 或 ti 字段且值为 null，则跳过（删除）
+    if ((key === 'to' || key === 'ti') && value === null) {
+      continue
+    }
+    result[key] = fixNullKeyframes(value)
+  }
+
+  return result
+}
+
 const triggerFileInput = () => fileInput.value.click()
 
 const handleFileSelect = (event) => {
@@ -243,13 +269,15 @@ const loadJsonFile = async (file) => {
   reader.onload = async (e) => {
     try {
       const jsonData = JSON.parse(e.target.result)
-      currentAnimationData.value = jsonData
+      // 修复 JSON 中的 null 值问题（to 和 ti 为 null 会导致 iOS/Android 闪退）
+      const fixedJsonData = fixNullKeyframes(jsonData)
+      currentAnimationData.value = fixedJsonData
       // 保存原始文件名
       originalFileName.value = file.name
       // 计算文件体积（KB）
       lottieFileSize.value = (new Blob([e.target.result]).size / 1024).toFixed(2)
       await nextTick()
-      playAnimation(jsonData)
+      playAnimation(fixedJsonData)
     } catch (error) {
       toastRef.value?.show('JSON 文件格式错误：' + error.message)
     }
@@ -572,6 +600,9 @@ const downloadBase64Lottie = () => {
 
     // 优化数值精度（但保持 base64 图片数据不变）
     finalData = optimizeNumbers(finalData)
+
+    // 修复 null 值问题（确保下载的文件不包含 to/ti 为 null）
+    finalData = fixNullKeyframes(finalData)
 
     // 生成下载文件的字符串
     const optimizedString = JSON.stringify(finalData) // 不使用格式化，减小体积
