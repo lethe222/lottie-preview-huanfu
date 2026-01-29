@@ -233,7 +233,7 @@ const fixNullKeyframes = (obj) => {
   }
 
   if (Array.isArray(obj)) {
-    return obj.map(item => fixNullKeyframes(item))
+    return obj.map((item) => fixNullKeyframes(item))
   }
 
   const result = {}
@@ -269,13 +269,13 @@ const loadJsonFile = async (file) => {
   reader.onload = async (e) => {
     try {
       const jsonData = JSON.parse(e.target.result)
-      // 修复 JSON 中的 null 值问题（to 和 ti 为 null 会导致 iOS/Android 闪退）
       const fixedJsonData = fixNullKeyframes(jsonData)
       currentAnimationData.value = fixedJsonData
-      // 保存原始文件名
       originalFileName.value = file.name
-      // 计算文件体积（KB）
       lottieFileSize.value = (new Blob([e.target.result]).size / 1024).toFixed(2)
+
+      saveOriginalVectorStructure(fixedJsonData)
+
       await nextTick()
       playAnimation(fixedJsonData)
     } catch (error) {
@@ -453,6 +453,64 @@ const selectImageToReplace = (asset) => {
   imageInput.value.click()
 }
 
+const originalVectorStructure = ref(null)
+
+const saveOriginalVectorStructure = (data) => {
+  const structure = {}
+  for (let i = 0; i < data.layers.length; i++) {
+    const layer = data.layers[i]
+    if (layer.ty === 4) {
+      structure[i] = JSON.parse(JSON.stringify(layer.shapes || []))
+    }
+  }
+  originalVectorStructure.value = structure
+}
+
+const optimizeVectorLayers = (data) => {
+  if (!originalVectorStructure.value) {
+    return { optimizedCount: 0, pathsBefore: 0, pathsAfter: 0 }
+  }
+
+  let optimizedCount = 0
+  let pathsBefore = 0
+  let pathsAfter = 0
+
+  const countPaths = (shapes) => {
+    let count = 0
+    for (const shape of shapes) {
+      if (shape.ty === 'gr') {
+        count += countPaths(shape.it || [])
+      } else if (shape.ty === 'sh') {
+        count++
+      }
+    }
+    return count
+  }
+
+  for (let i = 0; i < data.layers.length; i++) {
+    const layer = data.layers[i]
+    const originalShapes = originalVectorStructure.value[i]
+
+    if (layer.ty === 4 && originalShapes) {
+      const currentShapes = layer.shapes || []
+      const currentPathCount = countPaths(currentShapes)
+      const originalPathCount = countPaths(originalShapes)
+
+      pathsBefore += currentPathCount
+
+      if (currentPathCount > originalPathCount * 2) {
+        layer.shapes = JSON.parse(JSON.stringify(originalShapes))
+        optimizedCount++
+        pathsAfter += originalPathCount
+      } else {
+        pathsAfter += currentPathCount
+      }
+    }
+  }
+
+  return { optimizedCount, pathsBefore, pathsAfter }
+}
+
 const handleImageSelect = (event) => {
   const file = event.target.files[0]
   if (!file || !currentReplacingAsset.value) return
@@ -468,8 +526,21 @@ const handleImageSelect = (event) => {
       currentAnimationData.value.assets[assetIndex].p = base64Image
       currentAnimationData.value.assets[assetIndex].u = ''
       currentAnimationData.value.assets[assetIndex].e = 1
+
+      const { optimizedCount, pathsBefore, pathsAfter } = optimizeVectorLayers(
+        currentAnimationData.value,
+      )
+
       playAnimation(currentAnimationData.value)
-      toastRef.value?.show('图片替换成功！')
+
+      if (optimizedCount > 0) {
+        const reduction = pathsBefore - pathsAfter
+        toastRef.value?.show(
+          `图片替换成功！已优化 ${optimizedCount} 个矢量图层，减少 ${reduction} 个冗余路径`,
+        )
+      } else {
+        toastRef.value?.show('图片替换成功！')
+      }
     }
     event.target.value = ''
     currentReplacingAsset.value = null
