@@ -2,13 +2,15 @@
   <Toast ref="toastRef" />
   <div class="main-box">
     <h1>Lottie 播放器与图片替换工具</h1>
-    <p>只支持base64格式的lottie动画上传，可以替换动画中的图片资源</p>
+    <p>只支持base64格式的lottie动画，可以替换动画中的图片资源</p>
     <router-link to="/Updatelog" class="updatelog"> 更新日志</router-link>
 
     <div class="upload-area" @dragover.prevent @drop.prevent="handleDrop" @click="triggerFileInput">
       <p>📁 将base64格式的lottie动画文件拖拽到此区域</p>
       <p class="upload-hint">或点击选择文件</p>
     </div>
+
+    <UrlImport @import-success="handleUrlImport" @toast="showToast" />
 
     <input
       ref="fileInput"
@@ -54,6 +56,7 @@ import { ref, computed } from 'vue'
 import Toast from '../components/Toast.vue'
 import LottiePlayer from '../components/LottiePlayer.vue'
 import ImageResourceList from '../components/ImageResourceList.vue'
+import UrlImport from '../components/UrlImport.vue'
 import { fixNullKeyframes } from '../utils/lottieUtils'
 
 // ========== 响应式数据 ==========
@@ -100,17 +103,30 @@ const loadJsonFile = async (file) => {
   reader.onload = async (e) => {
     try {
       const jsonData = JSON.parse(e.target.result)
-      const fixedJsonData = fixNullKeyframes(jsonData)
-      currentAnimationData.value = fixedJsonData
-      originalFileName.value = file.name
-      lottieFileSize.value = (new Blob([e.target.result]).size / 1024).toFixed(2)
-
-      saveOriginalVectorStructure(fixedJsonData)
+      const size = (new Blob([e.target.result]).size / 1024).toFixed(2)
+      processJsonData(jsonData, file.name, size)
     } catch (error) {
       showToast('JSON 文件格式错误：' + error.message)
     }
   }
   reader.readAsText(file)
+}
+
+const handleUrlImport = ({ data, name, size }) => {
+  processJsonData(data, name, size)
+}
+
+const processJsonData = (jsonData, name, size) => {
+  try {
+    const fixedJsonData = fixNullKeyframes(jsonData)
+    currentAnimationData.value = fixedJsonData
+    originalFileName.value = name
+    lottieFileSize.value = size
+
+    saveOriginalVectorStructure(fixedJsonData)
+  } catch (error) {
+    showToast('处理 JSON 数据失败：' + error.message)
+  }
 }
 
 const selectImageToReplace = (asset) => {
