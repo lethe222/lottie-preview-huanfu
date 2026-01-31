@@ -6,7 +6,7 @@ import vueDevTools from 'vite-plugin-vue-devtools'
 
 // https://vite.dev/config/
 export default defineConfig({
-  base: './', // 使用相对路径，支持直接打开 HTML 文件
+  base: '/lottie-preview-huanfu/',
   plugins: [vue(), vueDevTools()],
   resolve: {
     alias: {
