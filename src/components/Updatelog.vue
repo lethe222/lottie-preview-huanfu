@@ -41,8 +41,8 @@ import { ref } from 'vue'
 const logs = ref([
   // --- 在这里添加新的版本 ---
   {
-    version: 'v1.4.0',
-    date: '2026-01-31',
+    version: 'v1.5.0',
+    date: '2026-02-02',
     items: ['🔨 修复复杂动画无法正常播放问题'],
   },
   {
