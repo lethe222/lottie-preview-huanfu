@@ -3,7 +3,12 @@
     <div class="background-controls">
       <label for="bgColor">🎨 播放器背景：</label>
       <div class="color-picker-group">
-        <input type="color" id="bgColor" :value="modelValue" @input="$emit('update:modelValue', $event.target.value)" />
+        <input
+          type="color"
+          id="bgColor"
+          :value="modelValue"
+          @input="$emit('update:modelValue', $event.target.value)"
+        />
         <input
           type="text"
           :value="modelValue"
@@ -24,9 +29,7 @@
       <button @click="stopAnimation" class="control-btn">停止</button>
       <button @click="restartAnimation" class="control-btn">重播</button>
       <button @click="goToFirstFrame" class="control-btn">首帧</button>
-      <button @click="saveCurrentFrame" class="control-btn control-btn-primary">
-        保存当前帧
-      </button>
+      <button @click="saveCurrentFrame" class="control-btn control-btn-primary">保存当前帧</button>
       <button @click="downloadBase64Lottie" class="control-btn control-btn-primary">
         下载Base64 Lottie
       </button>
@@ -56,9 +59,8 @@
       </p>
       <p><strong>帧率：</strong>{{ animationData.fr }} FPS</p>
       <p>
-        <strong>时长：</strong>{{
-          ((animationData.op - animationData.ip) / animationData.fr).toFixed(2)
-        }}秒
+        <strong>时长：</strong
+        >{{ ((animationData.op - animationData.ip) / animationData.fr).toFixed(2) }}秒
       </p>
       <p><strong>文件体积：</strong>{{ lottieFileSize }} KB</p>
       <p><strong>图片资源数量：</strong>{{ imageAssetsCount }}</p>
@@ -74,24 +76,24 @@ import { fixNullKeyframes } from '../utils/lottieUtils'
 const props = defineProps({
   animationData: {
     type: Object,
-    required: true
+    required: true,
   },
   lottieFileSize: {
     type: [String, Number],
-    default: 0
+    default: 0,
   },
   modelValue: {
     type: String,
-    default: '#ffffff'
+    default: '#ffffff',
   },
   originalFileName: {
     type: String,
-    default: 'lottie-base64.json'
+    default: 'lottie-base64.json',
   },
   imageAssetsCount: {
     type: Number,
-    default: 0
-  }
+    default: 0,
+  },
 })
 
 const emit = defineEmits(['update:modelValue', 'exportImages', 'toast'])
@@ -116,42 +118,42 @@ const playAnimation = (animationData) => {
 
   lottieContainer.value.innerHTML = ''
 
-  setTimeout(() => {
-    try {
-      animation = lottie.loadAnimation({
-        container: lottieContainer.value,
-        renderer: 'svg',
-        loop: true,
-        autoplay: true,
-        animationData: animationData,
-      })
+  try {
+    animation = lottie.loadAnimation({
+      container: lottieContainer.value,
+      renderer: 'svg',
+      loop: true,
+      autoplay: true,
+      animationData: animationData,
+    })
 
-      isPlaying.value = true
-      totalFrames.value = Math.floor(
-        ((animationData.op - animationData.ip) / animationData.fr) * 1000,
-      )
+    isPlaying.value = true
+    totalFrames.value = animation.totalFrames
 
-      if (progressUpdateInterval) clearInterval(progressUpdateInterval)
+    if (progressUpdateInterval) clearInterval(progressUpdateInterval)
 
-      progressUpdateInterval = setInterval(() => {
-        if (animation && isPlaying.value) {
-          const currentTime = animation.currentRawFrame
-          const duration = animation.totalFrames
-          if (duration > 0) {
-            currentProgress.value = Math.floor((currentTime / duration) * 100)
-            currentFrame.value = Math.floor(currentTime)
-          }
+    progressUpdateInterval = setInterval(() => {
+      if (animation && isPlaying.value) {
+        const currentTime = animation.currentRawFrame
+        const duration = animation.totalFrames
+        if (duration > 0) {
+          currentProgress.value = Math.floor((currentTime / duration) * 100)
+          currentFrame.value = Math.floor(currentTime)
         }
-      }, 100)
-    } catch (error) {
-      emit('toast', '动画加载失败')
-    }
-  }, 50)
+      }
+    }, 100)
+  } catch (error) {
+    console.error('动画加载失败:', error)
+    emit('toast', '动画加载失败: ' + error.message)
+  }
 }
 
-watch(() => props.animationData, (newData) => {
-  if (newData) playAnimation(newData)
-}, { deep: true })
+watch(
+  () => props.animationData,
+  (newData) => {
+    if (newData) playAnimation(newData)
+  },
+)
 
 onMounted(() => {
   if (props.animationData) playAnimation(props.animationData)
@@ -199,46 +201,78 @@ const seekToProgress = () => {
 }
 
 const saveCurrentFrame = () => {
-  if (!animation) return
-  const wasPlaying = isPlaying.value
-  animation.pause()
-
-  const svgElement = lottieContainer.value.querySelector('svg')
-  if (!svgElement) {
-    emit('toast', '无法获取动画元素，请重试！')
-    if (wasPlaying) animation.play()
+  if (!animation) {
+    emit('toast', '动画未加载，无法保存当前帧！')
     return
   }
 
-  const svgClone = svgElement.cloneNode(true)
-  const svgData = new XMLSerializer().serializeToString(svgClone)
-  const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' })
-  const svgUrl = URL.createObjectURL(svgBlob)
+  console.log('开始保存当前帧')
+  const wasPlaying = isPlaying.value
+  animation.pause()
 
-  const img = new Image()
-  img.onload = () => {
-    const canvas = document.createElement('canvas')
-    canvas.width = img.width
-    canvas.height = img.height
-    const ctx = canvas.getContext('2d')
-    ctx.drawImage(img, 0, 0)
-    const pngUrl = canvas.toDataURL('image/png')
-    const link = document.createElement('a')
-    link.href = pngUrl
-    link.download = `lottie-frame-${currentFrame.value}.png`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(svgUrl)
-    if (wasPlaying) animation.play()
-    emit('toast', '当前帧已保存！')
-  }
-  img.onerror = () => {
-    emit('toast', '保存图片失败，请重试！')
-    URL.revokeObjectURL(svgUrl)
-    if (wasPlaying) animation.play()
-  }
-  img.src = svgUrl
+  setTimeout(() => {
+    const svgElement = lottieContainer.value.querySelector('svg')
+    console.log('查找 SVG 元素:', svgElement)
+
+    if (!svgElement) {
+      console.error('无法找到 SVG 元素，动画可能未正确加载')
+      // 检查容器内容
+      console.log('容器内容:', lottieContainer.value.innerHTML)
+
+      // 尝试重新加载动画
+      emit('toast', '无法获取动画元素，正在尝试重新加载...')
+      setTimeout(() => {
+        playAnimation(props.animationData)
+      }, 1000)
+
+      if (wasPlaying) animation.play()
+      return
+    }
+
+    try {
+      const svgClone = svgElement.cloneNode(true)
+      const svgData = new XMLSerializer().serializeToString(svgClone)
+      const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' })
+      const svgUrl = URL.createObjectURL(svgBlob)
+
+      const img = new Image()
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas')
+          canvas.width = img.width
+          canvas.height = img.height
+          const ctx = canvas.getContext('2d')
+          ctx.drawImage(img, 0, 0)
+          const pngUrl = canvas.toDataURL('image/png')
+          const link = document.createElement('a')
+          link.href = pngUrl
+          link.download = `lottie-frame-${currentFrame.value}.png`
+          document.body.appendChild(link)
+          link.click()
+          document.body.removeChild(link)
+          URL.revokeObjectURL(svgUrl)
+          if (wasPlaying) animation.play()
+          emit('toast', '当前帧已保存！')
+        } catch (error) {
+          console.error('保存图片失败:', error)
+          emit('toast', '保存图片失败，请重试！')
+          URL.revokeObjectURL(svgUrl)
+          if (wasPlaying) animation.play()
+        }
+      }
+      img.onerror = () => {
+        console.error('图片加载失败')
+        emit('toast', '保存图片失败，请重试！')
+        URL.revokeObjectURL(svgUrl)
+        if (wasPlaying) animation.play()
+      }
+      img.src = svgUrl
+    } catch (error) {
+      console.error('保存当前帧失败:', error)
+      emit('toast', '保存当前帧失败，请重试！')
+      if (wasPlaying) animation.play()
+    }
+  }, 100)
 }
 
 const downloadBase64Lottie = () => {
@@ -251,7 +285,7 @@ const downloadBase64Lottie = () => {
     const optimizedData = JSON.parse(JSON.stringify(props.animationData))
     let optimizationInfo = { originalSize: 0, optimizedSize: 0, removedKeyframes: 0 }
 
-    const roundNumber = (num) => typeof num !== 'number' ? num : Math.round(num * 100) / 100
+    const roundNumber = (num) => (typeof num !== 'number' ? num : Math.round(num * 100) / 100)
     const optimizeNumbers = (obj) => {
       if (typeof obj === 'number') return roundNumber(obj)
       if (Array.isArray(obj)) return obj.map(optimizeNumbers)
@@ -268,10 +302,16 @@ const downloadBase64Lottie = () => {
       const result = [keyframes[0]]
       let removedCount = 0
       for (let i = 1; i < keyframes.length - 1; i++) {
-        const prev = keyframes[i - 1], curr = keyframes[i], next = keyframes[i + 1]
+        const prev = keyframes[i - 1],
+          curr = keyframes[i],
+          next = keyframes[i + 1]
         let isImportant = false
         if (curr.s && prev.s && next.s) {
-          if (JSON.stringify(curr.s) !== JSON.stringify(prev.s) || JSON.stringify(curr.s) !== JSON.stringify(next.s)) isImportant = true
+          if (
+            JSON.stringify(curr.s) !== JSON.stringify(prev.s) ||
+            JSON.stringify(curr.s) !== JSON.stringify(next.s)
+          )
+            isImportant = true
         } else isImportant = true
         if (isImportant) result.push(curr)
         else removedCount++
@@ -286,7 +326,8 @@ const downloadBase64Lottie = () => {
       if (Array.isArray(obj)) return obj.map(optimizeAnimation)
       const result = {}
       for (const key in obj) {
-        if (key === 'k' && obj.a === 1 && Array.isArray(obj[key])) result[key] = optimizeKeyframes(obj[key])
+        if (key === 'k' && obj.a === 1 && Array.isArray(obj[key]))
+          result[key] = optimizeKeyframes(obj[key])
         else result[key] = optimizeAnimation(obj[key])
       }
       return result
@@ -308,7 +349,10 @@ const downloadBase64Lottie = () => {
 
     const downloadSize = (blob.size / 1024).toFixed(2)
     const reduction = ((1 - blob.size / (props.lottieFileSize * 1024)) * 100).toFixed(1)
-    emit('toast', `下载完成！原始大小: ${props.lottieFileSize}KB，优化后: ${downloadSize}KB（减少${reduction}%）`)
+    emit(
+      'toast',
+      `下载完成！原始大小: ${props.lottieFileSize}KB，优化后: ${downloadSize}KB（减少${reduction}%）`,
+    )
   } catch (error) {
     emit('toast', '下载失败，请稍后重试！')
   }

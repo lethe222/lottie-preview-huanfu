@@ -52,7 +52,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, shallowRef } from 'vue'
 import Toast from '../components/Toast.vue'
 import LottiePlayer from '../components/LottiePlayer.vue'
 import ImageResourceList from '../components/ImageResourceList.vue'
@@ -63,13 +63,14 @@ import { fixNullKeyframes } from '../utils/lottieUtils'
 const toastRef = ref(null)
 const fileInput = ref(null)
 const imageInput = ref(null)
-const currentAnimationData = ref(null)
+const currentAnimationData = shallowRef(null)
 const currentReplacingAsset = ref(null)
 const backgroundColor = ref('#ffffff')
 const resourceListBackgroundColor = ref('#f5f7fa')
 const originalFileName = ref('lottie-base64.json')
 const lottieFileSize = ref(0)
 const originalVectorStructure = ref(null)
+const isLoading = ref(false)
 
 // ========== 计算属性 ==========
 const imageAssets = computed(() => {
@@ -118,14 +119,41 @@ const handleUrlImport = ({ data, name, size }) => {
 
 const processJsonData = (jsonData, name, size) => {
   try {
-    const fixedJsonData = fixNullKeyframes(jsonData)
-    currentAnimationData.value = fixedJsonData
-    originalFileName.value = name
-    lottieFileSize.value = size
+    console.log('开始处理动画数据，大小:', size, 'KB')
+    isLoading.value = true
+    showToast('正在加载动画，请稍候...')
 
-    saveOriginalVectorStructure(fixedJsonData)
+    // 计算动画数据大小
+    const dataSize = JSON.stringify(jsonData).length
+    console.log('动画数据实际大小:', (dataSize / 1024).toFixed(2), 'KB')
+
+    // 检查数据大小是否超过合理范围
+    if (dataSize > 5 * 1024 * 1024) {
+      // 5MB
+      showToast('动画文件过大，可能导致加载缓慢或失败')
+    }
+
+    // 使用 setTimeout 避免阻塞主线程
+    setTimeout(() => {
+      try {
+        const fixedJsonData = fixNullKeyframes(jsonData)
+        currentAnimationData.value = fixedJsonData
+        originalFileName.value = name
+        lottieFileSize.value = size
+
+        saveOriginalVectorStructure(fixedJsonData)
+        showToast('动画加载成功！')
+      } catch (error) {
+        console.error('处理 JSON 数据失败:', error)
+        showToast('处理 JSON 数据失败：' + error.message)
+      } finally {
+        isLoading.value = false
+      }
+    }, 100)
   } catch (error) {
+    console.error('处理 JSON 数据失败:', error)
     showToast('处理 JSON 数据失败：' + error.message)
+    isLoading.value = false
   }
 }
 
