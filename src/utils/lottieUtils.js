@@ -23,3 +23,24 @@ export const fixNullKeyframes = (obj) => {
 
   return result
 }
+
+/**
+ * 将图片 URL 转换为 Base64
+ * @param {string} url 图片 URL
+ * @returns {Promise<string>} Base64 字符串
+ */
+export const fetchImageAsBase64 = async (url) => {
+  try {
+    const response = await fetch(url, { mode: 'cors' })
+    const blob = await response.blob()
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onloadend = () => resolve(reader.result)
+      reader.onerror = reject
+      reader.readAsDataURL(blob)
+    })
+  } catch (error) {
+    console.error('Convert image to base64 failed:', error)
+    throw error
+  }
+}

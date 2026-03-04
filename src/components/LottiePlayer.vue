@@ -71,7 +71,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import lottie from 'lottie-web'
-import { fixNullKeyframes } from '../utils/lottieUtils'
+import { fixNullKeyframes, fetchImageAsBase64 } from '../utils/lottieUtils'
 
 const props = defineProps({
   animationData: {
@@ -210,7 +210,7 @@ const saveCurrentFrame = () => {
   const wasPlaying = isPlaying.value
   animation.pause()
 
-  setTimeout(() => {
+  setTimeout(async () => {
     const svgElement = lottieContainer.value.querySelector('svg')
     console.log('查找 SVG 元素:', svgElement)
 
@@ -231,6 +231,32 @@ const saveCurrentFrame = () => {
 
     try {
       const svgClone = svgElement.cloneNode(true)
+
+      // 使用 Lottie 原始尺寸，确保导出清晰度
+      if (props.animationData && props.animationData.w && props.animationData.h) {
+        svgClone.setAttribute('width', props.animationData.w)
+        svgClone.setAttribute('height', props.animationData.h)
+        svgClone.style.width = ''
+        svgClone.style.height = ''
+      }
+
+      // 处理 SVG 中的图片引用
+      const images = svgClone.querySelectorAll('image')
+      for (const img of images) {
+        const href = img.getAttribute('href') || img.getAttribute('xlink:href')
+        if (href && (href.startsWith('http') || href.startsWith('//'))) {
+          try {
+            const base64 = await fetchImageAsBase64(href)
+            img.setAttribute('href', base64)
+            if (img.hasAttribute('xlink:href')) {
+              img.setAttribute('xlink:href', base64)
+            }
+          } catch (e) {
+            console.error('转换图片为Base64失败:', href, e)
+          }
+        }
+      }
+
       const svgData = new XMLSerializer().serializeToString(svgClone)
       const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' })
       const svgUrl = URL.createObjectURL(svgBlob)
@@ -239,10 +265,14 @@ const saveCurrentFrame = () => {
       img.onload = () => {
         try {
           const canvas = document.createElement('canvas')
-          canvas.width = img.width
-          canvas.height = img.height
+          // 优先使用动画原始尺寸
+          const width = props.animationData?.w || img.width
+          const height = props.animationData?.h || img.height
+
+          canvas.width = width
+          canvas.height = height
           const ctx = canvas.getContext('2d')
-          ctx.drawImage(img, 0, 0)
+          ctx.drawImage(img, 0, 0, width, height)
           const pngUrl = canvas.toDataURL('image/png')
           const link = document.createElement('a')
           link.href = pngUrl
@@ -275,7 +305,7 @@ const saveCurrentFrame = () => {
   }, 100)
 }
 
-const downloadBase64Lottie = () => {
+const downloadBase64Lottie = async () => {
   if (!props.animationData) {
     emit('toast', '没有可下载的动画数据！')
     return
@@ -283,6 +313,30 @@ const downloadBase64Lottie = () => {
 
   try {
     const optimizedData = JSON.parse(JSON.stringify(props.animationData))
+
+    // 处理资源图片
+    if (optimizedData.assets && Array.isArray(optimizedData.assets)) {
+      for (const asset of optimizedData.assets) {
+        let imageUrl = null
+        if (asset.p && (asset.p.startsWith('http') || asset.p.startsWith('//'))) {
+          imageUrl = asset.p
+        } else if (asset.u && (asset.u.startsWith('http') || asset.u.startsWith('//'))) {
+          imageUrl = asset.u + asset.p
+        }
+
+        if (imageUrl) {
+          try {
+            const base64 = await fetchImageAsBase64(imageUrl)
+            asset.p = base64
+            asset.u = ''
+            asset.e = 1
+          } catch (e) {
+            console.error('转换资源图片失败:', imageUrl, e)
+          }
+        }
+      }
+    }
+
     let optimizationInfo = { originalSize: 0, optimizedSize: 0, removedKeyframes: 0 }
 
     const roundNumber = (num) => (typeof num !== 'number' ? num : Math.round(num * 100) / 100)

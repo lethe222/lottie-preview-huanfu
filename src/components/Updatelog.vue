@@ -41,6 +41,15 @@ import { ref } from 'vue'
 const logs = ref([
   // --- 在这里添加新的版本 ---
   {
+    version: 'v1.6.0',
+    date: '2026-03-04',
+    items: [
+      '🐛 修复 Lottie 图片资源为 CDN 链接时，保存当前帧和下载 Base64 Lottie 图片丢失的问题',
+      '🖼️ 保存当前帧和下载 Base64 Lottie 时，自动将 CDN 图片转换为 Base64 内嵌',
+      '✨ 优化"保存当前帧"的分辨率，使用 Lottie 原始尺寸导出',
+    ],
+  },
+  {
     version: 'v1.5.0',
     date: '2026-02-02',
     items: ['🔨 修复复杂动画无法正常播放问题'],
