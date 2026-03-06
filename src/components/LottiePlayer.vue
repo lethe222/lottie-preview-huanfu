@@ -268,7 +268,7 @@ const saveCurrentFrame = () => {
           // 优先使用动画原始尺寸
           const width = props.animationData?.w || img.width
           const height = props.animationData?.h || img.height
-
+          
           canvas.width = width
           canvas.height = height
           const ctx = canvas.getContext('2d')
