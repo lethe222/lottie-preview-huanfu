@@ -76,7 +76,7 @@ const fileInput = ref(null)
 const imageInput = ref(null)
 const currentAnimationData = shallowRef(null)
 const currentReplacingAsset = ref(null)
-const backgroundColor = ref('#ffffff')
+const backgroundColor = ref('#787878')
 const resourceListBackgroundColor = ref('#f5f7fa')
 const originalFileName = ref('lottie-base64.json')
 const lottieFileSize = ref(0)
@@ -195,7 +195,8 @@ const saveOriginalVectorStructure = (data) => {
   for (let i = 0; i < data.layers.length; i++) {
     const layer = data.layers[i]
     if (layer.ty === 4) {
-      structure[i] = JSON.parse(JSON.stringify(layer.shapes || []))
+      // 优化：避免昂贵的 JSON.stringify
+      structure[i] = layer.shapes ? [...layer.shapes] : []
     }
   }
   originalVectorStructure.value = structure
@@ -225,7 +226,8 @@ const optimizeVectorLayers = (data) => {
       const originalPathCount = countPaths(originalShapes)
       pathsBefore += currentPathCount
       if (currentPathCount > originalPathCount * 2) {
-        layer.shapes = JSON.parse(JSON.stringify(originalShapes))
+        // 优化：使用简单的对象解构/数组解构替代 JSON 深拷贝
+        layer.shapes = [...originalShapes]
         optimizedCount++
         pathsAfter += originalPathCount
       } else pathsAfter += currentPathCount
@@ -242,26 +244,23 @@ const handleImageSelect = (event) => {
   const reader = new FileReader()
   reader.onload = (e) => {
     const base64Image = e.target.result
-    const assetIndex = currentAnimationData.value.assets.findIndex(
+
+    // 优化：不再使用 JSON.stringify 进行全量深拷贝
+    // 直接在当前数据上修改，然后通过解构触发 shallowRef 的响应式
+    const asset = currentAnimationData.value.assets.find(
       (a) => a.id === currentReplacingAsset.value.id,
     )
 
-    if (assetIndex !== -1) {
-      // 创建一个新对象以触发 Vue 的响应式更新
-      const newData = JSON.parse(JSON.stringify(currentAnimationData.value))
-      newData.assets[assetIndex].p = base64Image
-      newData.assets[assetIndex].u = ''
-      newData.assets[assetIndex].e = 1
+    if (asset) {
+      asset.p = base64Image
+      asset.u = ''
+      asset.e = 1
 
-      const { optimizedCount, pathsBefore, pathsAfter } = optimizeVectorLayers(newData)
-      currentAnimationData.value = newData
+      // 优化：原地修改数据，只在最后触发一次响应式
+      optimizeVectorLayers(currentAnimationData.value)
+      currentAnimationData.value = { ...currentAnimationData.value }
 
-      if (optimizedCount > 0) {
-        const reduction = pathsBefore - pathsAfter
-        showToast(`图片替换成功！已优化 ${optimizedCount} 个矢量图层，减少 ${reduction} 个冗余路径`)
-      } else {
-        showToast('图片替换成功！')
-      }
+      showToast('图片替换成功！')
     }
     event.target.value = ''
     currentReplacingAsset.value = null
@@ -274,8 +273,9 @@ const handleBatchReplace = async (files) => {
 
   trackEvent('batch_image_replace')
   showToast(`开始批量处理 ${files.length} 张图片...`)
+
   let replaceCount = 0
-  const newData = JSON.parse(JSON.stringify(currentAnimationData.value))
+  const animationData = currentAnimationData.value
 
   const readFileAsDataURL = (file) => {
     return new Promise((resolve) => {
@@ -285,17 +285,17 @@ const handleBatchReplace = async (files) => {
     })
   }
 
-  // 建立文件名到 base64 的映射
+  // 1. 先并行读取所有文件，减少等待时间
   const fileMap = {}
-  for (const file of files) {
+  const readPromises = files.map(async (file) => {
     const base64 = await readFileAsDataURL(file)
-    // 去掉扩展名进行匹配
     const fileNameWithoutExt = file.name.replace(/\.[^/.]+$/, '')
     fileMap[fileNameWithoutExt.toLowerCase()] = base64
-  }
+  })
+  await Promise.all(readPromises)
 
-  // 遍历 assets 进行替换
-  newData.assets.forEach((asset) => {
+  // 2. 遍历 assets 进行替换（原地修改）
+  animationData.assets.forEach((asset) => {
     if (asset.w && asset.h && (asset.u || asset.p || asset.e === 1)) {
       const assetName = (asset.nm || asset.p || '').replace(/\.[^/.]+$/, '')
       if (assetName && fileMap[assetName.toLowerCase()]) {
@@ -308,11 +308,12 @@ const handleBatchReplace = async (files) => {
   })
 
   if (replaceCount > 0) {
-    const { optimizedCount } = optimizeVectorLayers(newData)
-    currentAnimationData.value = newData
-    showToast(
-      `批量替换成功！共替换 ${replaceCount} 张图片${optimizedCount > 0 ? `，并优化 ${optimizedCount} 个矢量图层` : ''}`,
-    )
+    // 3. 执行优化逻辑
+    optimizeVectorLayers(animationData)
+    // 4. 最后触发一次响应式更新，让播放器重载
+    currentAnimationData.value = { ...animationData }
+
+    showToast(`批量替换成功！共替换 ${replaceCount} 张图片`)
   } else {
     showToast('未找到匹配的图片，请确保文件名与图层名一致')
   }
