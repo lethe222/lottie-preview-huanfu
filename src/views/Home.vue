@@ -53,6 +53,12 @@
   </div>
 </template>
 
+<script>
+export default {
+  name: 'Home',
+}
+</script>
+
 <script setup>
 import { ref, computed, shallowRef } from 'vue'
 import Toast from '../components/Toast.vue'

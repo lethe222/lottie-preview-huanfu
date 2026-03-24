@@ -1,5 +1,6 @@
 <template>
   <div class="update-log-page">
+    <router-link to="/" class="back-btn"> <span class="back-icon">←</span> 返回首页 </router-link>
     <div class="page-header">
       <h1>更新日志</h1>
       <p class="subtitle">我们在持续进行功能和体验升级,</p>
@@ -49,6 +50,7 @@ const logs = ref([
       '📦 导出功能升级：支持一键导出所有图片为 ZIP 压缩包，压缩包内图片统一按图层名命名',
       '🚀 新增批量替换功能：支持上传多张图片，自动根据文件名匹配并替换动画中的对应资源',
       '🎨 界面布局优化：将图片导出与批量替换按钮整合至资源列表上方，操作更集中',
+      '🔧 修复导航丢失问题：新增更新日志返回按钮，并优化页面缓存逻辑，返回首页时保留已加载的 Lottie 动画',
     ],
   },
   {
@@ -123,6 +125,35 @@ const logs = ref([
   font-family:
     -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   color: #333;
+}
+
+.back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  background-color: #fff;
+  color: #606266;
+  text-decoration: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 500;
+  border: 1px solid #dcdfe6;
+  transition: all 0.3s ease;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.back-btn:hover {
+  color: #409eff;
+  border-color: #c6e2ff;
+  background-color: #ecf5ff;
+  transform: translateX(-4px);
+  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.1);
+}
+
+.back-icon {
+  font-size: 18px;
 }
 
 .page-header {
