@@ -9,19 +9,21 @@ export const fixNullKeyframes = (obj) => {
   }
 
   if (Array.isArray(obj)) {
-    return obj.map((item) => fixNullKeyframes(item))
-  }
-
-  const result = {}
-  for (const [key, value] of Object.entries(obj)) {
-    // 如果是关键帧对象中的 to 或 ti 字段且值为 null，则跳过（删除）
-    if ((key === 'to' || key === 'ti') && value === null) {
-      continue
+    for (let i = 0; i < obj.length; i++) {
+      fixNullKeyframes(obj[i])
     }
-    result[key] = fixNullKeyframes(value)
+    return obj
   }
 
-  return result
+  for (const key in obj) {
+    if ((key === 'to' || key === 'ti') && obj[key] === null) {
+      delete obj[key]
+    } else {
+      fixNullKeyframes(obj[key])
+    }
+  }
+
+  return obj
 }
 
 /**

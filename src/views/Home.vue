@@ -135,13 +135,9 @@ const processJsonData = (jsonData, name, size) => {
     isLoading.value = true
     showToast('正在加载动画，请稍候...')
 
-    // 计算动画数据大小
-    const dataSize = JSON.stringify(jsonData).length
-    console.log('动画数据实际大小:', (dataSize / 1024).toFixed(2), 'KB')
-
-    // 检查数据大小是否超过合理范围
-    if (dataSize > 5 * 1024 * 1024) {
-      // 5MB
+    // 检查数据大小是否超过合理范围，直接使用传入的 size，避免昂贵的 JSON.stringify
+    if (parseFloat(size) > 5120) {
+      // 5MB = 5120KB
       showToast('动画文件过大，可能导致加载缓慢或失败')
     }
 
@@ -150,16 +146,23 @@ const processJsonData = (jsonData, name, size) => {
       try {
         const fixedJsonData = fixNullKeyframes(jsonData)
 
-        // Map layer names to assets if asset doesn't have nm
+        // Map layer names to assets if asset doesn't have nm (优化为 O(N) 复杂度)
         if (fixedJsonData.assets && fixedJsonData.layers) {
-          fixedJsonData.assets.forEach((asset) => {
+          const layerMap = new Map()
+          for (const layer of fixedJsonData.layers) {
+            if (layer.refId && layer.nm) {
+              layerMap.set(layer.refId, layer.nm)
+            }
+          }
+
+          for (const asset of fixedJsonData.assets) {
             if (!asset.nm) {
-              const layer = fixedJsonData.layers.find((l) => l.refId === asset.id)
-              if (layer && layer.nm) {
-                asset.nm = layer.nm
+              const layerNm = layerMap.get(asset.id)
+              if (layerNm) {
+                asset.nm = layerNm
               }
             }
-          })
+          }
         }
 
         currentAnimationData.value = fixedJsonData
