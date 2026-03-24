@@ -55,10 +55,10 @@
         </div>
 
         <div class="image-info">
-          <p class="image-id">ID: {{ asset.id }}</p>
           <p class="image-name" :title="getImageName(asset)">
             {{ getImageName(asset) }}
           </p>
+          <p class="image-id">ID: {{ asset.id }}</p>
           <p class="image-size">{{ asset.w }} x {{ asset.h }}｜{{ getImageSize(asset) }} KB</p>
         </div>
 
@@ -329,20 +329,21 @@ const getImageSize = (asset) => {
   min-width: 0;
 }
 
-.image-id {
+.image-name {
   font-weight: bold;
   color: #333;
   margin: 0 0 5px 0;
   font-size: 14px;
-}
-
-.image-name {
-  color: #666;
-  margin: 0 0 5px 0;
-  font-size: 13px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.image-id {
+  color: #909399;
+  margin: 0 0 4px 0;
+  font-size: 12px;
+  font-family: monospace;
 }
 
 .image-size {
