@@ -46,6 +46,8 @@
         :image-assets="imageAssets"
         @replace-image="selectImageToReplace"
         @download-image="downloadImage"
+        @export-images="exportAllImages"
+        @batch-replace-images="handleBatchReplace"
       />
     </div>
   </div>
@@ -253,6 +255,54 @@ const handleImageSelect = (event) => {
     currentReplacingAsset.value = null
   }
   reader.readAsDataURL(file)
+}
+
+const handleBatchReplace = async (files) => {
+  if (!currentAnimationData.value || !files.length) return
+
+  showToast(`开始批量处理 ${files.length} 张图片...`)
+  let replaceCount = 0
+  const newData = JSON.parse(JSON.stringify(currentAnimationData.value))
+
+  const readFileAsDataURL = (file) => {
+    return new Promise((resolve) => {
+      const reader = new FileReader()
+      reader.onload = (e) => resolve(e.target.result)
+      reader.readAsDataURL(file)
+    })
+  }
+
+  // 建立文件名到 base64 的映射
+  const fileMap = {}
+  for (const file of files) {
+    const base64 = await readFileAsDataURL(file)
+    // 去掉扩展名进行匹配
+    const fileNameWithoutExt = file.name.replace(/\.[^/.]+$/, '')
+    fileMap[fileNameWithoutExt.toLowerCase()] = base64
+  }
+
+  // 遍历 assets 进行替换
+  newData.assets.forEach((asset) => {
+    if (asset.w && asset.h && (asset.u || asset.p || asset.e === 1)) {
+      const assetName = (asset.nm || asset.p || '').replace(/\.[^/.]+$/, '')
+      if (assetName && fileMap[assetName.toLowerCase()]) {
+        asset.p = fileMap[assetName.toLowerCase()]
+        asset.u = ''
+        asset.e = 1
+        replaceCount++
+      }
+    }
+  })
+
+  if (replaceCount > 0) {
+    const { optimizedCount } = optimizeVectorLayers(newData)
+    currentAnimationData.value = newData
+    showToast(
+      `批量替换成功！共替换 ${replaceCount} 张图片${optimizedCount > 0 ? `，并优化 ${optimizedCount} 个矢量图层` : ''}`,
+    )
+  } else {
+    showToast('未找到匹配的图片，请确保文件名与图层名一致')
+  }
 }
 
 const downloadImage = (asset) => {

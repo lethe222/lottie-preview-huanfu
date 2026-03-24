@@ -21,6 +21,21 @@
       </div>
     </div>
 
+    <div v-if="imageAssets.length > 0" class="batch-actions">
+      <button @click="triggerBatchReplace" class="batch-btn batch-btn-primary">批量替换图片</button>
+      <button @click="$emit('exportImages')" class="batch-btn batch-btn-secondary">
+        导出所有图片
+      </button>
+      <input
+        ref="batchImageInput"
+        type="file"
+        multiple
+        accept="image/*"
+        class="hidden-input"
+        @change="handleBatchImageSelect"
+      />
+    </div>
+
     <div v-if="imageAssets.length === 0" class="empty-state">
       <p>😊 当前动画没有使用图片资源</p>
       <p class="empty-hint">这是一个纯矢量动画</p>
@@ -57,6 +72,8 @@
 </template>
 
 <script setup>
+import { ref } from 'vue'
+
 const props = defineProps({
   imageAssets: {
     type: Array,
@@ -68,7 +85,27 @@ const props = defineProps({
   },
 })
 
-defineEmits(['update:modelValue', 'replaceImage', 'downloadImage'])
+const emit = defineEmits([
+  'update:modelValue',
+  'replaceImage',
+  'downloadImage',
+  'exportImages',
+  'batchReplaceImages',
+])
+
+const batchImageInput = ref(null)
+
+const triggerBatchReplace = () => {
+  batchImageInput.value.click()
+}
+
+const handleBatchImageSelect = (event) => {
+  const files = Array.from(event.target.files)
+  if (files.length > 0) {
+    emit('batchReplaceImages', files)
+  }
+  event.target.value = ''
+}
 
 const getImageUrl = (asset) => {
   if (asset.p && asset.e === 1) return asset.p
@@ -185,6 +222,50 @@ const getImageSize = (asset) => {
 
 .reset-btn:hover {
   background-color: #a6a9ad;
+}
+
+.batch-actions {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.batch-btn {
+  flex: 1;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  color: white;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.3s;
+}
+
+.batch-btn-primary {
+  background-color: #409eff;
+}
+
+.batch-btn-primary:hover {
+  background-color: #66b1ff;
+  transform: translateY(-1px);
+}
+
+.batch-btn-secondary {
+  background-color: #67c23a;
+}
+
+.batch-btn-secondary:hover {
+  background-color: #85ce61;
+  transform: translateY(-1px);
+}
+
+.hidden-input {
+  display: none;
 }
 
 .empty-state {

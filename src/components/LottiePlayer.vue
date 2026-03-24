@@ -33,9 +33,6 @@
       <button @click="downloadBase64Lottie" class="control-btn control-btn-primary">
         下载Base64 Lottie
       </button>
-      <button @click="$emit('exportImages')" class="control-btn control-btn-secondary">
-        导出所有图片
-      </button>
     </div>
 
     <div class="progress-section">
@@ -268,7 +265,7 @@ const saveCurrentFrame = () => {
           // 优先使用动画原始尺寸
           const width = props.animationData?.w || img.width
           const height = props.animationData?.h || img.height
-          
+
           canvas.width = width
           canvas.height = height
           const ctx = canvas.getContext('2d')
