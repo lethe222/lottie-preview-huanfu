@@ -58,6 +58,8 @@ import LottiePlayer from '../components/LottiePlayer.vue'
 import ImageResourceList from '../components/ImageResourceList.vue'
 import UrlImport from '../components/UrlImport.vue'
 import { fixNullKeyframes } from '../utils/lottieUtils'
+import JSZip from 'jszip'
+import { saveAs } from 'file-saver'
 
 // ========== 响应式数据 ==========
 const toastRef = ref(null)
@@ -137,6 +139,19 @@ const processJsonData = (jsonData, name, size) => {
     setTimeout(() => {
       try {
         const fixedJsonData = fixNullKeyframes(jsonData)
+
+        // Map layer names to assets if asset doesn't have nm
+        if (fixedJsonData.assets && fixedJsonData.layers) {
+          fixedJsonData.assets.forEach((asset) => {
+            if (!asset.nm) {
+              const layer = fixedJsonData.layers.find((l) => l.refId === asset.id)
+              if (layer && layer.nm) {
+                asset.nm = layer.nm
+              }
+            }
+          })
+        }
+
         currentAnimationData.value = fixedJsonData
         originalFileName.value = name
         lottieFileSize.value = size
@@ -245,43 +260,94 @@ const downloadImage = (asset) => {
   if (!imageUrl) return
   const link = document.createElement('a')
   link.href = imageUrl
-  link.download = asset.p || asset.id || 'lottie-image'
+
+  let fileName = asset.nm
+  if (!fileName) {
+    if (asset.p && !asset.p.startsWith('data:image')) {
+      fileName = asset.p
+    } else {
+      fileName = asset.id || 'lottie-image'
+    }
+  }
+
+  if (!fileName.includes('.')) {
+    let ext = 'png'
+    if (asset.p && asset.p.startsWith('data:image')) {
+      const mimeMatch = asset.p.match(/data:image\/(\w+);base64,/)
+      ext = mimeMatch ? mimeMatch[1] : 'png'
+    } else if (asset.p && !asset.p.startsWith('data:image')) {
+      const extMatch = asset.p.match(/\.(\w+)$/)
+      ext = extMatch ? extMatch[1] : 'png'
+    }
+    fileName = `${fileName}.${ext}`
+  }
+
+  link.download = fileName
   document.body.appendChild(link)
   link.click()
   document.body.removeChild(link)
 }
 
-const exportAllImages = () => {
+const exportAllImages = async () => {
   if (!currentAnimationData.value || !imageAssets.value.length) {
     showToast('当前动画没有图片资源可导出！')
     return
   }
 
-  let exportedCount = 0
-  imageAssets.value.forEach((asset, index) => {
-    try {
-      let imageUrl = asset.p && asset.p.startsWith('data:image') ? asset.p : asset.u + asset.p
-      if (!imageUrl) return
-      let ext = 'png'
-      if (asset.p && asset.p.startsWith('data:image')) {
-        const mimeMatch = asset.p.match(/data:image\/(\w+);base64,/)
-        ext = mimeMatch ? mimeMatch[1] : 'png'
-      } else if (asset.p) {
-        const extMatch = asset.p.match(/\.(\w+)$/)
-        ext = extMatch ? extMatch[1] : 'png'
+  try {
+    showToast('正在生成压缩包，请稍候...')
+    const zip = new JSZip()
+    let exportedCount = 0
+
+    const promises = imageAssets.value.map(async (asset, index) => {
+      try {
+        let imageUrl = asset.p && asset.p.startsWith('data:image') ? asset.p : asset.u + asset.p
+        if (!imageUrl) return
+
+        let ext = 'png'
+        if (asset.p && asset.p.startsWith('data:image')) {
+          const mimeMatch = asset.p.match(/data:image\/(\w+);base64,/)
+          ext = mimeMatch ? mimeMatch[1] : 'png'
+        } else if (asset.p && !asset.p.startsWith('data:image')) {
+          const extMatch = asset.p.match(/\.(\w+)$/)
+          ext = extMatch ? extMatch[1] : 'png'
+        }
+
+        let fileName = asset.nm
+        if (!fileName) {
+          if (asset.p && !asset.p.startsWith('data:image')) {
+            fileName = asset.p
+          } else {
+            fileName = `image_${asset.id || index}`
+          }
+        }
+
+        if (!fileName.includes('.')) {
+          fileName = `${fileName}.${ext}`
+        }
+
+        const response = await fetch(imageUrl)
+        const blob = await response.blob()
+        zip.file(fileName, blob)
+        exportedCount++
+      } catch (err) {
+        console.error(`处理图片 ${asset.id} 失败:`, err)
       }
-      const link = document.createElement('a')
-      link.href = imageUrl
-      link.download = `image_${asset.id || index}.${ext}`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      exportedCount++
-    } catch (error) {
-      console.error(`导出图片 ${asset.id} 失败:`, error)
+    })
+
+    await Promise.all(promises)
+
+    if (exportedCount > 0) {
+      const content = await zip.generateAsync({ type: 'blob' })
+      saveAs(content, 'lottie_images.zip')
+      showToast(`成功导出 ${exportedCount} 张图片压缩包！`)
+    } else {
+      showToast('没有可导出的图片！')
     }
-  })
-  if (exportedCount > 0) showToast(`成功导出 ${exportedCount} 张图片！`)
+  } catch (error) {
+    console.error('导出图片失败:', error)
+    showToast('导出图片失败：' + error.message)
+  }
 }
 </script>
 

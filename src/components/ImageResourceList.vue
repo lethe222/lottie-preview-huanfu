@@ -4,7 +4,12 @@
     <div class="background-controls">
       <label for="resourceBgColor">📂 资源列表背景：</label>
       <div class="color-picker-group">
-        <input type="color" id="resourceBgColor" :value="modelValue" @input="$emit('update:modelValue', $event.target.value)" />
+        <input
+          type="color"
+          id="resourceBgColor"
+          :value="modelValue"
+          @input="$emit('update:modelValue', $event.target.value)"
+        />
         <input
           type="text"
           :value="modelValue"
@@ -36,8 +41,8 @@
 
         <div class="image-info">
           <p class="image-id">ID: {{ asset.id }}</p>
-          <p class="image-name" :title="asset.p">
-            {{ asset.p || asset.u || '未命名' }}
+          <p class="image-name" :title="getImageName(asset)">
+            {{ getImageName(asset) }}
           </p>
           <p class="image-size">{{ asset.w }} x {{ asset.h }}｜{{ getImageSize(asset) }} KB</p>
         </div>
@@ -55,12 +60,12 @@
 const props = defineProps({
   imageAssets: {
     type: Array,
-    required: true
+    required: true,
   },
   modelValue: {
     type: String,
-    default: '#f5f7fa'
-  }
+    default: '#f5f7fa',
+  },
 })
 
 defineEmits(['update:modelValue', 'replaceImage', 'downloadImage'])
@@ -69,6 +74,13 @@ const getImageUrl = (asset) => {
   if (asset.p && asset.e === 1) return asset.p
   if (asset.u && asset.p) return asset.u + asset.p
   return ''
+}
+
+const getImageName = (asset) => {
+  if (asset.nm) return asset.nm
+  if (asset.p && !asset.p.startsWith('data:image')) return asset.p
+  if (asset.u) return asset.u
+  return '未命名'
 }
 
 const handleImageError = (event) => {
