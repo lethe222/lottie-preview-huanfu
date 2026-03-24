@@ -75,15 +75,22 @@ onMounted(() => {
     const rawStats = JSON.parse(localStorage.getItem('lottie_tool_daily_usage') || '{}')
     const formattedStats = {}
 
+    // 获取今天的日期字符串 (与 track.js 逻辑保持一致)
+    const todayStr = new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' })
+
     // 我们只统计 2026-03-24 及以后的数据
     const startDate = new Date('2026-03-24')
+
+    // 确保今天的数据至少显示为 0，这样你一打开就能看到卡片
+    if (!rawStats[todayStr]) {
+      formattedStats[todayStr] = 0
+    }
 
     Object.keys(rawStats)
       .sort((a, b) => new Date(b) - new Date(a))
       .forEach((dateStr) => {
-        // 这里的 dateStr 可能是 2026/3/24 或 2026-03-24，具体取决于 locale
         const date = new Date(dateStr)
-        if (date >= startDate) {
+        if (date >= startDate || dateStr === todayStr) {
           formattedStats[dateStr] = rawStats[dateStr].total || 0
         }
       })
