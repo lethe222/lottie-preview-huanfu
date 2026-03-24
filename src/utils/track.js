@@ -4,8 +4,7 @@
  */
 export const trackEvent = (action) => {
   try {
-    // 1. 本地 LocalStorage 统计
-    // 使用本地时间获取今天的日期 (YYYY/MM/DD)
+    // 1. 本地 LocalStorage 统计 (保留作为备份)
     const today = new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' })
     const storageKey = 'lottie_tool_daily_usage'
 
@@ -16,18 +15,22 @@ export const trackEvent = (action) => {
       stats = {}
     }
 
-    // 初始化今天的数据
     if (!stats[today]) {
       stats[today] = { total: 0 }
     }
 
-    // 记录总次数和分类次数
     stats[today].total += 1
     stats[today][action] = (stats[today][action] || 0) + 1
-
     localStorage.setItem(storageKey, JSON.stringify(stats))
 
-    console.log(`📊 [埋点] ${today} | 动作: ${action} | 今日总触发次数: ${stats[today].total}`)
+    // 2. 远程服务器统计 (阿里云)
+    fetch('http://101.200.38.189:3000/api/track', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action })
+    }).catch(err => console.error('远程埋点上报失败:', err));
+
+    console.log(`📊 [埋点] ${today} | 动作: ${action} | 远程同步中...`)
 
     // 2. 第三方远程统计预留接口
     // 如果你在 index.html 中接入了百度统计，这里会自动上报

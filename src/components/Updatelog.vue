@@ -70,18 +70,26 @@ const totalUsage = computed(() => {
   return Object.values(usageStats.value).reduce((sum, count) => sum + count, 0)
 })
 
-onMounted(() => {
+onMounted(async () => {
+  try {
+    // 1. 先尝试获取远程服务器统计数据 (全局)
+    const response = await fetch('http://101.200.38.189:3000/api/stats')
+    if (response.ok) {
+      const globalStats = await response.json()
+      usageStats.value = globalStats
+      return
+    }
+  } catch (e) {
+    console.error('远程统计加载失败，回退至本地存储:', e)
+  }
+
+  // 2. 降级逻辑：如果远程失败，则读取本地存储
   try {
     const rawStats = JSON.parse(localStorage.getItem('lottie_tool_daily_usage') || '{}')
     const formattedStats = {}
-
-    // 获取今天的日期字符串 (与 track.js 逻辑保持一致)
     const todayStr = new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' })
-
-    // 我们只统计 2026-03-24 及以后的数据
     const startDate = new Date('2026-03-24')
 
-    // 确保今天的数据至少显示为 0，这样你一打开就能看到卡片
     if (!rawStats[todayStr]) {
       formattedStats[todayStr] = 0
     }
@@ -97,7 +105,7 @@ onMounted(() => {
 
     usageStats.value = formattedStats
   } catch (e) {
-    console.error('加载统计数据失败:', e)
+    console.error('本地统计数据加载失败:', e)
   }
 })
 
