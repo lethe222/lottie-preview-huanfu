@@ -68,6 +68,7 @@ import UrlImport from '../components/UrlImport.vue'
 import { fixNullKeyframes } from '../utils/lottieUtils'
 import JSZip from 'jszip'
 import { saveAs } from 'file-saver'
+import { trackEvent } from '../utils/track'
 
 // ========== 响应式数据 ==========
 const toastRef = ref(null)
@@ -130,6 +131,7 @@ const handleUrlImport = ({ data, name, size }) => {
 const processJsonData = (jsonData, name, size) => {
   try {
     console.log('开始处理动画数据，大小:', size, 'KB')
+    trackEvent('upload_lottie_json')
     isLoading.value = true
     showToast('正在加载动画，请稍候...')
 
@@ -233,6 +235,7 @@ const handleImageSelect = (event) => {
   const file = event.target.files[0]
   if (!file || !currentReplacingAsset.value) return
 
+  trackEvent('single_image_replace')
   const reader = new FileReader()
   reader.onload = (e) => {
     const base64Image = e.target.result
@@ -266,6 +269,7 @@ const handleImageSelect = (event) => {
 const handleBatchReplace = async (files) => {
   if (!currentAnimationData.value || !files.length) return
 
+  trackEvent('batch_image_replace')
   showToast(`开始批量处理 ${files.length} 张图片...`)
   let replaceCount = 0
   const newData = JSON.parse(JSON.stringify(currentAnimationData.value))
@@ -314,6 +318,8 @@ const handleBatchReplace = async (files) => {
 const downloadImage = (asset) => {
   const imageUrl = asset.p && asset.p.startsWith('data:image') ? asset.p : asset.u + asset.p
   if (!imageUrl) return
+
+  trackEvent('single_image_download')
   const link = document.createElement('a')
   link.href = imageUrl
 
@@ -350,6 +356,7 @@ const exportAllImages = async () => {
     return
   }
 
+  trackEvent('batch_image_export_zip')
   try {
     showToast('正在生成压缩包，请稍候...')
     const zip = new JSZip()

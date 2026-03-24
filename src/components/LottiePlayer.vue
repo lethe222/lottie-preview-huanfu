@@ -69,6 +69,7 @@
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import lottie from 'lottie-web'
 import { fixNullKeyframes, fetchImageAsBase64 } from '../utils/lottieUtils'
+import { trackEvent } from '../utils/track'
 
 const props = defineProps({
   animationData: {
@@ -203,6 +204,7 @@ const saveCurrentFrame = () => {
     return
   }
 
+  trackEvent('save_current_frame')
   console.log('开始保存当前帧')
   const wasPlaying = isPlaying.value
   animation.pause()
@@ -308,6 +310,7 @@ const downloadBase64Lottie = async () => {
     return
   }
 
+  trackEvent('download_base64_json')
   try {
     const optimizedData = JSON.parse(JSON.stringify(props.animationData))
 
