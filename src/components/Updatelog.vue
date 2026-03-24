@@ -7,6 +7,32 @@
     </div>
 
     <div class="timeline-container">
+      <!-- 统计数据卡片 -->
+      <div v-if="Object.keys(usageStats).length > 0" class="timeline-item usage-stats-item">
+        <div class="version-meta">
+          <div class="version-number">📊</div>
+          <div class="version-date">使用统计</div>
+        </div>
+        <div class="timeline-axis">
+          <div class="dot current-dot">
+            <div class="dot-inner"></div>
+          </div>
+          <div class="line"></div>
+        </div>
+        <div class="content-card stats-card">
+          <div class="stats-header">
+            <span class="stats-title">🚀 运行数据统计 (自 2026-03-24 起)</span>
+            <span class="total-badge">累计使用: {{ totalUsage }} 次</span>
+          </div>
+          <div class="stats-grid">
+            <div v-for="(count, date) in usageStats" :key="date" class="stats-item">
+              <div class="stats-date">{{ date }}</div>
+              <div class="stats-count">{{ count }} <span class="unit">次</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div v-for="(log, index) in logs" :key="index" class="timeline-item">
         <!-- 左侧：版本信息 -->
         <div class="version-meta">
@@ -37,7 +63,36 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted, computed } from 'vue'
+
+const usageStats = ref({})
+const totalUsage = computed(() => {
+  return Object.values(usageStats.value).reduce((sum, count) => sum + count, 0)
+})
+
+onMounted(() => {
+  try {
+    const rawStats = JSON.parse(localStorage.getItem('lottie_tool_daily_usage') || '{}')
+    const formattedStats = {}
+
+    // 我们只统计 2026-03-24 及以后的数据
+    const startDate = new Date('2026-03-24')
+
+    Object.keys(rawStats)
+      .sort((a, b) => new Date(b) - new Date(a))
+      .forEach((dateStr) => {
+        // 这里的 dateStr 可能是 2026/3/24 或 2026-03-24，具体取决于 locale
+        const date = new Date(dateStr)
+        if (date >= startDate) {
+          formattedStats[dateStr] = rawStats[dateStr].total || 0
+        }
+      })
+
+    usageStats.value = formattedStats
+  } catch (e) {
+    console.error('加载统计数据失败:', e)
+  }
+})
 
 const logs = ref([
   // --- 在这里添加新的版本 ---
@@ -310,6 +365,76 @@ const logs = ref([
 .log-list li::before {
   content: ''; /* 移除列表圆点，因为文本中包含 emoji */
   display: none;
+}
+
+/* 统计数据样式 */
+.stats-card {
+  background: linear-gradient(135deg, #f0f9eb 0%, #ffffff 100%) !important;
+  border: 1px solid #e1f3d8 !important;
+  margin-bottom: 30px;
+}
+
+.stats-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px dashed #e1f3d8;
+}
+
+.stats-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #67c23a;
+}
+
+.total-badge {
+  background-color: #67c23a;
+  color: white;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 15px;
+}
+
+.stats-item {
+  background: white;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #ebeef5;
+  text-align: center;
+  transition: transform 0.2s;
+}
+
+.stats-item:hover {
+  transform: scale(1.05);
+  border-color: #67c23a;
+}
+
+.stats-date {
+  font-size: 12px;
+  color: #909399;
+  margin-bottom: 6px;
+}
+
+.stats-count {
+  font-size: 20px;
+  font-weight: bold;
+  color: #1f2d3d;
+}
+
+.unit {
+  font-size: 12px;
+  font-weight: normal;
+  color: #909399;
+  margin-left: 2px;
 }
 
 @media (max-width: 768px) {
